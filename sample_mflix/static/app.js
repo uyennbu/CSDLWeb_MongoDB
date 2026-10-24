@@ -24,6 +24,10 @@ function switchTab(tabName) {
     document.querySelector("button[onclick=\"switchTab('replication')\"]").classList.add("active");
     document.getElementById("replicationTab").classList.add("active");
     loadReplicationStatus();
+  } else if (tabName === "sharding") {
+    document.querySelector("button[onclick=\"switchTab('sharding')\"]").classList.add("active");
+    document.getElementById("shardingTab").classList.add("active");
+    loadShardingStatus();
   }
 }
 
@@ -463,5 +467,124 @@ async function triggerSyncTest() {
     }
   } catch (err) {
     box.textContent = `❌ Lỗi mạng: ${err.message}`;
+  }
+}
+
+// 7. SHARDING DEMO LOGIC
+async function loadShardingStatus() {
+  const container = document.getElementById("shardsGrid");
+  container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 20px;">Đang tính toán phân bổ dữ liệu trên 3 Shard...</div>`;
+
+  try {
+    const res = await fetch("/api/sharding/status");
+    const data = await res.json();
+    container.innerHTML = "";
+
+    (data.shards || []).forEach((shard, idx) => {
+      const card = document.createElement("div");
+      card.className = "movie-card";
+
+      // Màu sắc theo từng shard
+      const colors = ["#b5c7e4", "#d5ccbe", "#9ac596"];
+      card.style.borderColor = colors[idx % colors.length];
+
+      card.innerHTML = `
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <h3 style="font-size:1.05rem; font-weight:700;">${shard.name}</h3>
+            <span class="badge" style="background:#efece6; font-weight:600;">${shard.percentage}% dữ liệu</span>
+          </div>
+
+          <div style="font-size:0.85rem; color:var(--text-muted); line-height:1.7; margin-bottom:12px;">
+            <div><strong>Host:</strong> <code>${shard.host}</code></div>
+            <div><strong>Khoảng Shard Key:</strong> <code>${shard.keyRange}</code></div>
+            <div style="margin-top:4px;"><strong>Mô tả:</strong> ${shard.description}</div>
+            <div style="margin-top:6px; font-size:0.95rem;">
+              <strong>Số documents:</strong> <strong style="color:var(--accent-dark);">${shard.documentCount.toLocaleString()}</strong> phim
+            </div>
+          </div>
+        </div>
+
+        <!-- Thanh tỷ lệ phân bổ -->
+        <div style="background:#e5e2db; height:8px; border-radius:4px; overflow:hidden; margin-top:auto;">
+          <div style="background:var(--accent-dark); width:${shard.percentage}%; height:100%;"></div>
+        </div>
+      `;
+
+      container.appendChild(card);
+    });
+
+  } catch (err) {
+    container.innerHTML = `<div style="grid-column: 1/-1; color: var(--danger-text); padding: 20px;">Lỗi tải phân bổ Shard: ${err.message}</div>`;
+  }
+}
+
+async function testRoute(queryType) {
+  document.getElementById("btnRouteSingle").className = queryType === "targeted_single" ? "btn btn-primary" : "btn btn-outline";
+  document.getElementById("btnRouteRange").className = queryType === "targeted_range" ? "btn btn-primary" : "btn btn-outline";
+  document.getElementById("btnRouteScatter").className = queryType === "scatter_gather" ? "btn btn-primary" : "btn btn-outline";
+
+  const box = document.getElementById("routingResultBox");
+  box.style.display = "block";
+  box.textContent = "// Đang phân tích định tuyến qua mongos router...";
+
+  try {
+    const res = await fetch("/api/sharding/route-explain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query_type: queryType })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      const output = [
+        `📌 Kiểu truy vấn: ${data.queryType}`,
+        `Cú pháp truy vấn mẫu: db.movies.find(${JSON.stringify(data.sampleQuery)})`,
+        `\n🧭 Quyết định của mongos Router:`,
+        `  - Giai đoạn thực thi (Explain stage): ${data.routingStage}`,
+        `  - Shard(s) được gửi truy vấn tới: [ ${data.targetedShards.join(", ")} ]`,
+        `  - Đánh giá hiệu năng: ${data.performance}`,
+        `\n💡 Giải thích chi tiết:\n${data.explanation}`
+      ];
+      box.textContent = output.join("\n");
+    } else {
+      box.textContent = "Lỗi: " + data.error;
+    }
+  } catch (err) {
+    box.textContent = "Lỗi mạng: " + err.message;
+  }
+}
+
+async function simulateInsertRoute() {
+  const yearInput = document.getElementById("testInsertYear").value;
+  const titleInput = document.getElementById("testInsertTitle").value.trim();
+  const year = parseInt(yearInput) || 2026;
+
+  const box = document.getElementById("insertRouteResult");
+  box.style.display = "block";
+  box.textContent = "// Đang tính toán Shard tiếp nhận bản ghi...";
+
+  try {
+    const res = await fetch("/api/sharding/insert-route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ year, title: titleInput || "Sample Movie" })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      const output = [
+        `✅ ${data.message}`,
+        `Shard Key giá trị: ${JSON.stringify(data.shardKey)}`,
+        `Shard được phân bổ lưu trữ: 🎯 ${data.assignedShard}`,
+        `Nguyên tắc phân vùng (Partitioning rule): ${data.rule}`
+      ];
+      box.textContent = output.join("\n");
+      showToast(`Bản ghi được gán về ${data.assignedShard}`);
+    } else {
+      box.textContent = "Lỗi: " + data.error;
+    }
+  } catch (err) {
+    box.textContent = "Lỗi mạng: " + err.message;
   }
 }

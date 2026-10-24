@@ -524,5 +524,137 @@ def replication_sync_test():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ==========================================
+# 4. SHARDING DEMO APIS
+# ==========================================
+
+# Mô hình Sharding 3 Shard (dựa trên Shard Key 'year' cho movies hoặc khoảng giá 'price')
+SHARD_RANGES = [
+    {
+        "id": "shard1RS",
+        "name": "Shard 1 (shard1RS)",
+        "host": "shard1:27017",
+        "keyRange": "year < 1980 (Phim cổ điển)",
+        "description": "Lưu trữ các bộ phim phát hành trước năm 1980",
+        "filter": {"year": {"$lt": 1980}}
+    },
+    {
+        "id": "shard2RS",
+        "name": "Shard 2 (shard2RS)",
+        "host": "shard2:27017",
+        "keyRange": "1980 <= year < 2000 (Thời kỳ hoàng kim)",
+        "description": "Lưu trữ các bộ phim từ năm 1980 đến 1999",
+        "filter": {"year": {"$gte": 1980, "$lt": 2000}}
+    },
+    {
+        "id": "shard3RS",
+        "name": "Shard 3 (shard3RS)",
+        "host": "shard3:27017",
+        "keyRange": "year >= 2000 (Điện ảnh hiện đại)",
+        "description": "Lưu trữ các bộ phim từ năm 2000 trở đi",
+        "filter": {"year": {"$gte": 2000}}
+    }
+]
+
+@app.route("/api/sharding/status", methods=["GET"])
+def get_sharding_status():
+    """Thống kê phân bổ dữ liệu Sharding theo Shard Key (giả lập hoặc kết nối sharding cluster thật nếu có)"""
+    try:
+        shards_info = []
+        total_movies = db.movies.count_documents({})
+
+        for s in SHARD_RANGES:
+            count = db.movies.count_documents(s["filter"])
+            pct = round((count / total_movies * 100), 1) if total_movies > 0 else 0
+            shards_info.append({
+                "id": s["id"],
+                "name": s["name"],
+                "host": s["host"],
+                "keyRange": s["keyRange"],
+                "description": s["description"],
+                "documentCount": count,
+                "percentage": pct
+            })
+
+        return jsonify({
+            "shardKey": "year (Range-based Sharding)",
+            "mongosRouter": "mongos:27017 (Client Gateway)",
+            "configServer": "cfgRS/cfg1:27017 (Metadata & Chunk Catalog)",
+            "totalDocuments": total_movies,
+            "shards": shards_info
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/sharding/route-explain", methods=["POST"])
+def explain_sharding_route():
+    """
+    Minh họa cách Router (mongos) định tuyến truy vấn:
+    - Targeted Query (Đơn Shard): Nếu có Shard Key ('year') -> Chỉ gửi đúng 1 Shard liên quan (cực nhanh).
+    - Multi-Shard Query: Nếu Shard Key trải qua 2 khoảng.
+    - Scatter-Gather Query: Nếu KHÔNG có Shard Key -> Phải phát tán tới TẤT CẢ các Shard rồi gộp kết quả.
+    """
+    try:
+        data = request.json or {}
+        query_type = data.get("query_type", "targeted")  # 'targeted_single', 'targeted_range', 'scatter_gather'
+
+        if query_type == "targeted_single":
+            # Ví dụ: find({ year: 1995, title: /Toy Story/ })
+            year_val = int(data.get("year", 1995))
+            target_shard = "shard1RS" if year_val < 1980 else ("shard2RS" if year_val < 2000 else "shard3RS")
+            sample_query = {"year": year_val}
+            return jsonify({
+                "queryType": "Targeted Query (Single Shard Routing)",
+                "explanation": f"Truy vấn chứa chính xác Shard Key 'year = {year_val}'. Mongos tra cứu Config Server và gửi thẳng truy vấn tới DUY NHẤT 1 Shard mà không làm phiền các Shard khác.",
+                "routingStage": "SINGLE_SHARD",
+                "targetedShards": [target_shard],
+                "sampleQuery": sample_query,
+                "performance": "⚡ Cực nhanh (Tối ưu hóa tài nguyên mạng và CPU)"
+            })
+
+        elif query_type == "targeted_range":
+            # Ví dụ: find({ year: { $gte: 1975, $lte: 1985 } })
+            sample_query = {"year": {"$gte": 1975, "$lte": 1985}}
+            return jsonify({
+                "queryType": "Targeted Range Query (Multi-Shard Route)",
+                "explanation": "Truy vấn tìm theo khoảng năm (1975 - 1985), khoảng này vắt ngang qua Shard 1 (<1980) và Shard 2 (1980-1999). Mongos chỉ cần gửi yêu cầu đến đúng 2 Shard này và gộp kết quả.",
+                "routingStage": "SHARD_MERGE (2 Shards)",
+                "targetedShards": ["shard1RS", "shard2RS"],
+                "sampleQuery": sample_query,
+                "performance": "👍 Nhanh (Chỉ truy cập đúng các Shard chứa dữ liệu)"
+            })
+
+        else:
+            # Ví dụ: find({ genres: "Action" }) -> Không có shard key!
+            sample_query = {"genres": "Action"}
+            return jsonify({
+                "queryType": "Scatter-Gather Query (Phát tán toàn cụm)",
+                "explanation": "Truy vấn KHÔNG chứa Shard Key (tìm theo 'genres'). Mongos không biết phim nằm ở đâu nên BẮT BUỘC phải gửi truy vấn tới TẤT CẢ các Shard trong hệ thống (Broadcast), sau đó gom kết quả về sắp xếp.",
+                "routingStage": "SHARD_MERGE (Broadcast all Shards)",
+                "targetedShards": ["shard1RS", "shard2RS", "shard3RS"],
+                "sampleQuery": sample_query,
+                "performance": "⚠️ Chậm và tốn tài nguyên (Cần tránh trong các hệ thống lớn)"
+            })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/sharding/insert-route", methods=["POST"])
+def simulate_sharding_insert():
+    """Minh họa router tự động định tuyến khi thêm mới document dựa vào Shard Key"""
+    try:
+        data = request.json or {}
+        year = int(data.get("year", 2026))
+        title = data.get("title", "Sample Movie")
+
+        target_shard = "shard1RS" if year < 1980 else ("shard2RS" if year < 2000 else "shard3RS")
+        return jsonify({
+            "message": f"Dựa vào Shard Key year={year}, Mongos tự động định tuyến bản ghi '{title}' vào đúng shard: {target_shard}",
+            "shardKey": {"year": year},
+            "assignedShard": target_shard,
+            "rule": "Range-based partitioning: [Min..1980) -> Shard1 | [1980..2000) -> Shard2 | [2000..Max] -> Shard3"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -106,3 +106,21 @@ Trang chuyên biệt để trực quan hóa cụm 3 node MongoDB (`rsMflix`):
    - Bấm **"🛑 Tắt Container (Giả lập chết)"** ngay tại node Primary.
    - Quan sát 2 node Secondary còn lại tự động tổ chức bầu cử chọn ra một **PRIMARY mới** mà không làm gián đoạn cụm.
    - Bấm **"▶️ Bật lại Container"**: Node bị tắt sẽ khởi động lại và tự gia nhập cụm với vai trò Secondary, đồng bộ lại oplog từ Primary mới.
+
+---
+
+### D. Tab 4: Sharding & Scale-Out (Phân mảnh ngang dữ liệu)
+Trang trực quan hóa toàn diện kiến trúc **Sharded Cluster**:
+
+1. **Sơ đồ cấu trúc 3 lớp:**
+   - **Client / Web App** $\rightarrow$ **mongos (Router)** $\rightarrow$ **Config Server (`cfgRS`)** $\rightarrow$ **3 Shards (`shard1RS`, `shard2RS`, `shard3RS`)**.
+2. **Phân bổ Shard theo Shard Key (`year`):**
+   - **Shard 1 (`shard1RS`):** `year < 1980` (Phim cổ điển) $\approx$ 18% dữ liệu.
+   - **Shard 2 (`shard2RS`):** `1980 <= year < 2000` (Thời kỳ hoàng kim) $\approx$ 27% dữ liệu.
+   - **Shard 3 (`shard3RS`):** `year >= 2000` (Điện ảnh hiện đại) $\approx$ 55% dữ liệu.
+3. **Demo 1: So sánh Định tuyến mongos Router:**
+   - **Targeted Query (Đơn Shard):** Khi truy vấn có Shard Key (`{ year: 1995 }`), `mongos` tra cứu Config Server và gửi thẳng truy vấn tới **DUY NHẤT 1 Shard** (`shard2RS`) $\rightarrow$ Cực nhanh và tối ưu tài nguyên.
+   - **Targeted Range Query (Đa Shard):** Khi truy vấn khoảng (`{ year: { $gte: 1975, $lte: 1985 } }`), `mongos` chỉ gửi tới **2 Shard liên quan** (`shard1RS`, `shard2RS`).
+   - **Scatter-Gather Query (Phát tán toàn cụm):** Khi truy vấn KHÔNG có Shard Key (`{ genres: "Action" }`), `mongos` buộc phải gửi đến **TẤT CẢ các Shard** rồi gom kết quả $\rightarrow$ Tốn tài nguyên mạng và CPU.
+4. **Demo 2: Định tuyến tự động khi Ghi (Insert Routing):**
+   - Thử nhập năm phát hành để xem `mongos` tự động tính toán phân bổ bản ghi mới vào đúng Shard lưu trữ theo Range Partitioning.
