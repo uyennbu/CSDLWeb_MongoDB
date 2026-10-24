@@ -1,0 +1,46 @@
+services:
+  mflix1:
+    image: mongo:latest
+    container_name: mflix1
+    hostname: mflix1
+    command: ["mongod", "--replSet", "rsMflix", "--bind_ip_all", "--port", "27030"]
+    ports:
+      - "27030:27030"
+    volumes:
+      - mflix1_data:/data/db
+      - ./sampledata.archive:/data/import/sampledata.archive:ro
+    networks:
+      - mflix-cluster
+
+  mflix2:
+    image: mongo:latest
+    container_name: mflix2
+    hostname: mflix2
+    command: ["mongod", "--replSet", "rsMflix", "--bind_ip_all", "--port", "27031"]
+    ports:
+      - "27031:27031"
+    volumes:
+      - mflix2_data:/data/db
+    networks:
+      - mflix-cluster
+
+  mflix3:
+    image: mongo:latest
+    container_name: mflix3
+    hostname: mflix3
+    command: ["mongod", "--replSet", "rsMflix", "--bind_ip_all", "--port", "27032"]
+    ports:
+      - "27032:27032"
+    volumes:
+      - mflix3_data:/data/db
+    networks:
+      - mflix-cluster
+
+volumes:
+  mflix1_data:
+  mflix2_data:
+  mflix3_data:
+
+networks:
+  mflix-cluster:
+    name: mflix-cluster

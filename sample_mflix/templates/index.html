@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MongoDB Sample Mflix Demo</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <h1>MongoDB Sample Mflix Demo</h1>
+      <p>Trực quan hóa truy vấn CRUD & Aggregation Pipeline trên MongoDB Replica Set</p>
+    </div>
+    <div class="cluster-badge" id="clusterStatus">
+      <span class="status-dot"></span>
+      <span id="statusText">Đang kết nối...</span>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="tabs">
+    <button class="tab-btn active" onclick="switchTab('crud')">1. CRUD Phim (Movies)</button>
+    <button class="tab-btn" onclick="switchTab('aggregation')">2. Aggregation Pipeline</button>
+  </nav>
+
+  <!-- TAB 1: CRUD -->
+  <main id="crudTab" class="tab-content active">
+    <!-- Search & Filter Card -->
+    <section class="card">
+      <div class="card-title">
+        <span>Tìm kiếm & Bộ lọc (Read)</span>
+        <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ Thêm phim mới (Create)</button>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group" style="flex: 2;">
+          <label>Từ khóa tiêu đề phim:</label>
+          <input type="text" id="searchInput" placeholder="Ví dụ: Matrix, Godfather, Love..." onkeyup="if(event.key==='Enter') searchMovies()">
+        </div>
+        <div class="form-group">
+          <label>Thể loại (Genre):</label>
+          <select id="genreSelect" onchange="searchMovies()">
+            <option value="">-- Tất cả thể loại --</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex: 0; min-width: 100px; justify-content: flex-end;">
+          <button class="btn btn-primary" onclick="searchMovies()">Tìm kiếm</button>
+        </div>
+      </div>
+
+      <div id="queryExplanation" class="code-box" style="display:none;"></div>
+      
+      <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 8px;">
+        Tìm thấy: <strong id="totalCount">0</strong> phim
+      </div>
+
+      <!-- Movie List -->
+      <div class="movie-grid" id="movieGrid"></div>
+    </section>
+  </main>
+
+  <!-- TAB 2: AGGREGATION -->
+  <main id="aggregationTab" class="tab-content">
+    <section class="card">
+      <div class="card-title">Minh họa MongoDB Aggregation Pipeline</div>
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 14px;">
+        Chọn một kịch bản phân tích mẫu để xem pipeline và kết quả thực thi:
+      </p>
+
+      <div class="agg-tabs">
+        <button class="btn btn-outline" id="btnAgg1" onclick="runAgg(1)">
+          Pipeline 1: $unwind + $group (Top thể loại)
+        </button>
+        <button class="btn btn-outline" id="btnAgg2" onclick="runAgg(2)">
+          Pipeline 2: $match + $sort + $group (Phim đỉnh nhất mỗi năm)
+        </button>
+        <button class="btn btn-outline" id="btnAgg3" onclick="runAgg(3)">
+          Pipeline 3: $lookup (JOIN Movies & Comments)
+        </button>
+      </div>
+
+      <!-- Pipeline Code Display -->
+      <label>MongoDB Pipeline Syntax:</label>
+      <div class="code-box" id="pipelineBox">// Nhấp một kịch bản phía trên để xem Pipeline...</div>
+
+      <!-- Result Container -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+        <h4 id="aggResultTitle" style="font-size: 0.95rem; color: var(--accent-dark);">Kết quả truy vấn:</h4>
+        <span id="aggTime" style="font-size: 0.8rem; color: var(--text-muted);"></span>
+      </div>
+      <div id="aggResultTableContainer" style="overflow-x: auto;"></div>
+    </section>
+  </main>
+
+  <!-- MODAL CREATE / EDIT -->
+  <div class="modal-overlay" id="movieModal">
+    <div class="modal">
+      <h3 class="card-title" id="modalTitle">Thêm phim mới (Create)</h3>
+      <input type="hidden" id="editMovieId">
+      
+      <div class="form-group" style="margin-bottom: 10px;">
+        <label>Tiêu đề phim (*):</label>
+        <input type="text" id="movieTitleInput" placeholder="Nhập tên phim">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Năm phát hành:</label>
+          <input type="number" id="movieYearInput" value="2026">
+        </div>
+        <div class="form-group">
+          <label>Điểm IMDb (1.0 - 10.0):</label>
+          <input type="number" step="0.1" id="movieRatingInput" value="8.0">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 10px;">
+        <label>Thể loại (cách nhau bởi dấu phẩy):</label>
+        <input type="text" id="movieGenresInput" placeholder="Action, Drama, Sci-Fi">
+      </div>
+
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label>Tóm tắt nội dung (Plot):</label>
+        <textarea id="moviePlotInput" placeholder="Nội dung phim ngắn gọn..."></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn btn-outline" onclick="closeModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="saveMovie()">Lưu vào MongoDB</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
