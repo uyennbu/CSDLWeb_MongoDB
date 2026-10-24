@@ -36,10 +36,80 @@ services:
     networks:
       - mongo-cluster
 
+  # ====================================================================
+  #  SHARDING (chỉ chạy khi dùng: docker compose --profile sharding up -d)
+  # ====================================================================
+
+  # Config Server: lưu metadata (shard nào giữ chunk nào)
+  cfg1:
+    image: mongo:latest
+    container_name: cfg1
+    hostname: cfg1
+    profiles: ["sharding"]
+    command: ["mongod", "--configsvr", "--replSet", "cfgRS", "--bind_ip_all", "--port", "27017"]
+    volumes:
+      - cfg1_data:/data/db
+    networks:
+      - mongo-cluster
+
+  # 3 Shard: mỗi shard là 1 replica set (1 node cho gọn)
+  shard1:
+    image: mongo:latest
+    container_name: shard1
+    hostname: shard1
+    profiles: ["sharding"]
+    command: ["mongod", "--shardsvr", "--replSet", "shard1RS", "--bind_ip_all", "--port", "27017"]
+    volumes:
+      - shard1_data:/data/db
+    networks:
+      - mongo-cluster
+
+  shard2:
+    image: mongo:latest
+    container_name: shard2
+    hostname: shard2
+    profiles: ["sharding"]
+    command: ["mongod", "--shardsvr", "--replSet", "shard2RS", "--bind_ip_all", "--port", "27017"]
+    volumes:
+      - shard2_data:/data/db
+    networks:
+      - mongo-cluster
+
+  shard3:
+    image: mongo:latest
+    container_name: shard3
+    hostname: shard3
+    profiles: ["sharding"]
+    command: ["mongod", "--shardsvr", "--replSet", "shard3RS", "--bind_ip_all", "--port", "27017"]
+    volumes:
+      - shard3_data:/data/db
+    networks:
+      - mongo-cluster
+
+  # Router: điểm kết nối duy nhất của client
+  mongos:
+    image: mongo:latest
+    container_name: mongos
+    hostname: mongos
+    profiles: ["sharding"]
+    command: ["mongos", "--configdb", "cfgRS/cfg1:27017", "--bind_ip_all", "--port", "27017"]
+    restart: unless-stopped   # tự khởi động lại cho tới khi cfgRS được rs.initiate()
+    ports:
+      - "27030:27017"
+    volumes:
+      - ./products.json:/data/import/products.json:ro
+    depends_on: [cfg1, shard1, shard2, shard3]
+    networks:
+      - mongo-cluster
+
 volumes:
   mongo1_data:
   mongo2_data:
   mongo3_data:
+  cfg1_data:
+  shard1_data:
+  shard2_data:
+  shard3_data:
 
 networks:
   mongo-cluster:
