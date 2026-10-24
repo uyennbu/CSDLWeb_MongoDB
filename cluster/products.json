@@ -1,0 +1,82 @@
+[
+  {
+    "product_name": "Bàn phím cơ DareU EK87",
+    "price": 650000,
+    "stock": 80,
+    "category": "Gaming Accessories",
+    "created_at": { "$date": "2026-10-24T08:00:00Z" },
+    "note": "Tài liệu này được ghi trên PRIMARY và tự động sao chép sang SECONDARY nodes qua Oplog."
+  },
+  {
+    "product_name": "Chuột gaming không dây Logitech G304 Lightspeed",
+    "price": 890000,
+    "stock": 120,
+    "category": "Gaming Accessories",
+    "created_at": { "$date": "2026-10-24T08:05:00Z" },
+    "note": "Tài liệu này được ghi trên PRIMARY và tự động sao chép sang SECONDARY nodes qua Oplog."
+  },
+  {
+    "product_name": "Tai nghe Gaming HyperX Cloud II Red",
+    "price": 1790000,
+    "stock": 45,
+    "category": "Audio",
+    "created_at": { "$date": "2026-10-24T08:10:00Z" },
+    "note": "Tài liệu này được ghi trên PRIMARY và tự động sao chép sang SECONDARY nodes qua Oplog."
+  },
+  {
+    "product_name": "Màn hình Asus TUF Gaming VG249Q 24 inch 144Hz",
+    "price": 3890000,
+    "stock": 30,
+    "category": "Monitors",
+    "created_at": { "$date": "2026-10-24T08:15:00Z" },
+    "note": "Tài liệu này được ghi trên PRIMARY và tự động sao chép sang SECONDARY nodes qua Oplog."
+  },
+  {
+    "product_name": "Bàn phím cơ không dây AKKO 3087 v2 Silent",
+    "price": 1450000,
+    "stock": 60,
+    "category": "Gaming Accessories",
+    "created_at": { "$date": "2026-10-24T08:20:00Z" },
+    "note": "Tài liệu này được ghi trên PRIMARY và tự động sao chép sang SECONDARY nodes qua Oplog."
+  },
+  {
+    "product_name": "Chuột gaming Razer DeathAdder Essential",
+    "price": 420000,
+    "stock": 150,
+    "category": "Gaming Accessories",
+    "created_at": { "$date": "2026-10-24T08:25:00Z" },
+    "note": "Tài liệu này được ghi trên PRIMARY và tự động sao chép sang SECONDARY nodes qua Oplog."
+  },
+  {
+    "product_name": "Lót chuột cỡ lớn SteelSeries QcK Heavy XXL",
+    "price": 690000,
+    "stock": 90,
+    "category": "Accessories",
+    "created_at": { "$date": "2026-10-24T08:30:00Z" },
+    "note": "Tài liệu này được ghi trên PRIMARY và tự động sao chép sang SECONDARY nodes qua Oplog."
+  },
+  {
+    "product_name": "Giá treo tai nghe RGB Razer Base Station V2 Chroma",
+    "price": 1290000,
+    "stock": 35,
+    "category": "Accessories",
+    "created_at": { "$date": "2026-10-24T08:35:00Z" },
+    "note": "Tài liệu này được ghi trên PRIMARY và tự động sao chép sang SECONDARY nodes qua Oplog."
+  },
+  {
+    "product_name": "Loa vi tính Bluetooth Edifier R1280DB",
+    "price": 2850000,
+    "stock": 25,
+    "category": "Audio",
+    "created_at": { "$date": "2026-10-24T08:40:00Z" },
+    "note": "Tài liệu này được ghi trên PRIMARY và tự động sao chép sang SECONDARY nodes qua Oplog."
+  },
+  {
+    "product_name": "Webcam Full HD Logitech C922 Pro Stream",
+    "price": 2150000,
+    "stock": 40,
+    "category": "Streaming",
+    "created_at": { "$date": "2026-10-24T08:45:00Z" },
+    "note": "Tài liệu này được ghi trên PRIMARY và tự động sao chép sang SECONDARY nodes qua Oplog."
+  }
+]

@@ -1,0 +1,84 @@
+services:
+  mongo1:
+    image: mongo:latest
+    container_name: mongo1
+    restart: always
+    ports:
+      - "27017:27017"
+    networks:
+      - mongo-cluster
+    command: mongod --replSet rs0 --bind_ip_all --port 27017
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  mongo2:
+    image: mongo:latest
+    container_name: mongo2
+    restart: always
+    ports:
+      - "27018:27018"
+    networks:
+      - mongo-cluster
+    command: mongod --replSet rs0 --bind_ip_all --port 27018
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27018", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  mongo3:
+    image: mongo:latest
+    container_name: mongo3
+    restart: always
+    ports:
+      - "27019:27019"
+    networks:
+      - mongo-cluster
+    command: mongod --replSet rs0 --bind_ip_all --port 27019
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27019", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # Container tự động cấu hình và khởi tạo Replica Set rs0
+  mongo-init:
+    image: mongo:latest
+    container_name: mongo-init
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
+    networks:
+      - mongo-cluster
+    restart: "no"
+    volumes:
+      - ./demo.js:/scripts/demo.js:ro
+      - ./products.json:/scripts/products.json:ro
+    entrypoint: ["mongosh", "--host", "mongo1:27017", "/scripts/demo.js"]
+
+  # Service chạy test_replication.py qua Docker (dùng lệnh: docker compose run --rm test-app)
+  test-app:
+    build: .
+    container_name: mongo-test
+    profiles:
+      - test
+    networks:
+      - mongo-cluster
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python test_replication.py
+
+networks:
+  mongo-cluster:
+    driver: bridge
