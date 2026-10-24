@@ -37,10 +37,17 @@
 
       <div class="form-row">
         <div class="form-group" style="flex: 2;">
-          <label>Từ khóa tiêu đề phim:</label>
-          <input type="text" id="searchInput" placeholder="Ví dụ: Matrix, Godfather, Love..." onkeyup="if(event.key==='Enter') searchMovies()">
+          <label>Từ khóa tìm kiếm:</label>
+          <input type="text" id="searchInput" placeholder="Ví dụ: space war, detective murder, godfather..." onkeyup="if(event.key==='Enter') searchMovies()">
         </div>
-        <div class="form-group">
+        <div class="form-group" style="flex: 1.2;">
+          <label>Chế độ tìm kiếm (Search Mode):</label>
+          <select id="searchModeSelect" onchange="searchMovies()">
+            <option value="text">🔍 MongoDB Full-Text Search ($text)</option>
+            <option value="regex">🔤 Regex thông thường (Chỉ tiêu đề)</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex: 1;">
           <label>Thể loại (Genre):</label>
           <select id="genreSelect" onchange="searchMovies()">
             <option value="">-- Tất cả thể loại --</option>
@@ -49,6 +56,10 @@
         <div class="form-group" style="flex: 0; min-width: 100px; justify-content: flex-end;">
           <button class="btn btn-primary" onclick="searchMovies()">Tìm kiếm</button>
         </div>
+      </div>
+
+      <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+        💡 <em>Mẹo Text Search:</em> Tìm trên cả <strong>title</strong>, <strong>plot</strong>, <strong>cast</strong> và <strong>genres</strong> nhờ Text Index. Tự động chấm điểm độ liên quan (<code>textScore</code>).
       </div>
 
       <div id="queryExplanation" class="code-box" style="display:none;"></div>

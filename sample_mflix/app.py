@@ -81,32 +81,59 @@ def list_movies():
     try:
         q = request.args.get("q", "").strip()
         genre = request.args.get("genre", "").strip()
-        limit = min(int(request.args.get("limit", 10)), 50)
+        mode = request.args.get("mode", "regex").strip()  # 'regex' hoặc 'text'
+        limit = min(int(request.args.get("limit", 12)), 50)
         skip = int(request.args.get("skip", 0))
 
         filter_query = {}
+        projection = {
+            "title": 1, "year": 1, "genres": 1, "imdb": 1, "plot": 1, "poster": 1, "cast": 1
+        }
+        sort_criteria = [("year", -1)]
+
         if q:
-            filter_query["title"] = {"$regex": q, "$options": "i"}
+            if mode == "text":
+                # Full-Text Search qua MongoDB Text Index
+                filter_query["$text"] = {"$search": q}
+                projection["score"] = {"$meta": "textScore"}
+                sort_criteria = [("score", {"$meta": "textScore"})]
+            else:
+                # Tìm kiếm Regex thông thường theo tiêu đề
+                filter_query["title"] = {"$regex": q, "$options": "i"}
+
         if genre:
             filter_query["genres"] = genre
 
-        cursor = db.movies.find(
-            filter_query,
-            {"title": 1, "year": 1, "genres": 1, "imdb": 1, "plot": 1, "poster": 1, "cast": 1}
-        ).sort("year", -1).skip(skip).limit(limit)
+        if mode == "text" and q:
+            cursor = db.movies.find(filter_query, projection).sort(sort_criteria).skip(skip).limit(limit)
+        else:
+            cursor = db.movies.find(filter_query, projection).sort(sort_criteria).skip(skip).limit(limit)
 
         movies = list(cursor)
+        # Làm tròn score nếu có
+        for m in movies:
+            if "score" in m and isinstance(m["score"], float):
+                m["score"] = round(m["score"], 2)
+
         total = db.movies.count_documents(filter_query)
 
         # Lấy danh sách thể loại phổ biến để lọc
         genres = db.movies.distinct("genres")
         clean_genres = sorted([g for g in genres if g and isinstance(g, str)])[:25]
 
+        # Mô tả câu lệnh MongoDB
+        if mode == "text" and q:
+            mongo_code = f"db.movies.find(\n  {{ $text: {{ $search: \"{q}\" }} }},\n  {{ title: 1, year: 1, score: {{ $meta: 'textScore' }} }}\n).sort({{ score: {{ $meta: 'textScore' }} }}).limit({limit})"
+        else:
+            mongo_code = f"db.movies.find({filter_query}, {{ title: 1, year: 1, genres: 1 }}).sort({{ year: -1 }}).limit({limit})"
+
         return jsonify({
             "total": total,
             "movies": serialize_doc(movies),
             "genres": clean_genres,
-            "query_used": filter_query
+            "mode": mode,
+            "query_used": filter_query,
+            "mongo_command": mongo_code
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -52,11 +52,22 @@ Truy cập vào trình duyệt web tại địa chỉ:
 
 ## 4. Các tính năng chính trên Web UI
 
-### A. Tab 1: CRUD Phim (Collection `movies`)
-1. **Read (Đọc & Tìm kiếm):**
-   - Tìm kiếm phim theo tiêu đề hoặc lọc theo thể loại (Genre).
-   - Tự động hiển thị câu lệnh MongoDB tương ứng:
-     `db.movies.find({ ... }).sort({ year: -1 }).limit(12)`
+### A. Tab 1: CRUD Phim & Text Search (Collection `movies`)
+1. **Read & Full-Text Search:**
+   - **Chế độ 1: 🔍 MongoDB Full-Text Search (`$text`)**: 
+     - Tận dụng Text Index có sẵn (`cast`, `fullplot`, `genres`, `title`).
+     - Tự động tính điểm liên quan và sắp xếp theo **`textScore`** (`score: { $meta: "textScore" }`).
+     - Có thể thử từ khóa: `"space war"`, `"detective murder"`, `"godfather mafia"`.
+     - Câu lệnh MongoDB:
+       ```javascript
+       db.movies.find(
+         { $text: { $search: "space war" } },
+         { title: 1, year: 1, score: { $meta: "textScore" } }
+       ).sort({ score: { $meta: "textScore" } }).limit(12)
+       ```
+   - **Chế độ 2: 🔤 Regex thông thường**:
+     - Tìm kiếm chuỗi con không phân biệt hoa thường theo tiêu đề (`title: { $regex: ..., $options: "i" }`).
+   - Tự động hiển thị câu lệnh MongoDB tương ứng trực tiếp trên giao diện.
 2. **Create (Thêm mới):**
    - Bấm nút **"+ Thêm phim mới (Create)"** ở góc trên.
    - Nhập tên phim, năm, điểm IMDb, thể loại và tóm tắt.

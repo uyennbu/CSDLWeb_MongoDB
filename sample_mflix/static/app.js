@@ -51,16 +51,17 @@ async function checkClusterStatus() {
   }
 }
 
-// 2. Tìm kiếm và Đọc danh sách phim (READ)
+// 2. Tìm kiếm và Đọc danh sách phim (READ & TEXT SEARCH)
 async function searchMovies() {
   const q = document.getElementById("searchInput").value;
   const genre = document.getElementById("genreSelect").value;
-  loadMovies(q, genre);
+  const mode = document.getElementById("searchModeSelect") ? document.getElementById("searchModeSelect").value : "text";
+  loadMovies(q, genre, mode);
 }
 
-async function loadMovies(q = "", genre = "") {
+async function loadMovies(q = "", genre = "", mode = "text") {
   try {
-    let url = `/api/movies?limit=12`;
+    let url = `/api/movies?limit=12&mode=${encodeURIComponent(mode)}`;
     if (q) url += `&q=${encodeURIComponent(q)}`;
     if (genre) url += `&genre=${encodeURIComponent(genre)}`;
 
@@ -72,7 +73,7 @@ async function loadMovies(q = "", genre = "") {
     // Hiển thị câu lệnh MongoDB tương ứng
     const queryBox = document.getElementById("queryExplanation");
     queryBox.style.display = "block";
-    queryBox.textContent = `// MongoDB Read Query:\ndb.movies.find(${JSON.stringify(data.query_used)}, {title:1, year:1, genres:1, imdb:1}).sort({year: -1}).limit(12)`;
+    queryBox.textContent = `// MongoDB Executed Query:\n${data.mongo_command || JSON.stringify(data.query_used)}`;
 
     // Cập nhật dropdown genres nếu chưa có
     if (currentGenres.length === 0 && data.genres) {
@@ -91,7 +92,7 @@ async function loadMovies(q = "", genre = "") {
     grid.innerHTML = "";
 
     if (!data.movies || data.movies.length === 0) {
-      grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Không tìm thấy phim phù hợp</div>`;
+      grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Không tìm thấy phim phù hợp với từ khóa "${escapeHtml(q)}"</div>`;
       return;
     }
 
@@ -102,6 +103,7 @@ async function loadMovies(q = "", genre = "") {
       const rating = m.imdb && m.imdb.rating ? m.imdb.rating : "N/A";
       const genresHtml = (m.genres || []).map(g => `<span class="badge">${g}</span>`).join("");
       const plot = m.plot || "Chưa có tóm tắt nội dung.";
+      const scoreBadge = m.score ? `<span class="badge" style="background:#e4ece0; color:#2c5b24; font-weight:600;">🎯 TextScore: ${m.score}</span>` : "";
 
       card.innerHTML = `
         <div>
@@ -111,6 +113,7 @@ async function loadMovies(q = "", genre = "") {
           <div class="movie-meta">
             <span>📅 ${m.year || "N/A"}</span>
             <span>⭐ IMDb: <strong>${rating}</strong></span>
+            ${scoreBadge}
           </div>
           <div style="margin-bottom: 8px;">${genresHtml}</div>
           <p class="movie-plot">${escapeHtml(plot)}</p>
