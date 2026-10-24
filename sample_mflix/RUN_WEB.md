@@ -91,3 +91,18 @@ Cung cấp 3 kịch bản minh họa pipeline thực tế kèm câu lệnh code 
    - Tìm bộ phim có điểm IMDb cao nhất trong mỗi năm (lấy `$first` sau khi sắp xếp).
 3. **Pipeline 3: `$lookup` (JOIN Collections)**
    - Nối bảng `movies` với `comments` theo `movie_id` để thống kê các phim có nhiều bình luận tương tác nhất.
+
+---
+
+### C. Tab 3: Replica Set & High Availability (Replication Demo)
+Trang chuyên biệt để trực quan hóa cụm 3 node MongoDB (`rsMflix`):
+
+1. **Giám sát trực tiếp trạng thái 3 Node:**
+   - Hiển thị vai trò hiện tại của từng container: 👑 **PRIMARY**, 🔄 **SECONDARY**, hoặc ❌ **DOWN**.
+   - Xem độ trễ ping (`ms`), cổng kết nối và số lượng documents đồng bộ trên từng node.
+2. **Demo Đồng bộ dữ liệu (Replication Sync Test):**
+   - Bấm nút **"Thực hiện kiểm tra đồng bộ (Sync Test)"**: Hệ thống ghi một bản ghi mới vào Primary rồi ngay lập tức đọc trực tiếp từ từng Secondary để kiểm chứng dữ liệu đã được nhân bản sang tất cả các node.
+3. **Demo Tự phục hồi & Bầu cử lại (Automatic Failover):**
+   - Bấm **"🛑 Tắt Container (Giả lập chết)"** ngay tại node Primary.
+   - Quan sát 2 node Secondary còn lại tự động tổ chức bầu cử chọn ra một **PRIMARY mới** mà không làm gián đoạn cụm.
+   - Bấm **"▶️ Bật lại Container"**: Node bị tắt sẽ khởi động lại và tự gia nhập cụm với vai trò Secondary, đồng bộ lại oplog từ Primary mới.

@@ -13,13 +13,17 @@ function switchTab(tabName) {
   if (tabName === "crud") {
     document.querySelector("button[onclick=\"switchTab('crud')\"]").classList.add("active");
     document.getElementById("crudTab").classList.add("active");
-  } else {
+  } else if (tabName === "aggregation") {
     document.querySelector("button[onclick=\"switchTab('aggregation')\"]").classList.add("active");
     document.getElementById("aggregationTab").classList.add("active");
     // Chạy mặc định Aggregation 1 nếu chưa chạy
     if (!document.getElementById("pipelineBox").dataset.loaded) {
       runAgg(1);
     }
+  } else if (tabName === "replication") {
+    document.querySelector("button[onclick=\"switchTab('replication')\"]").classList.add("active");
+    document.getElementById("replicationTab").classList.add("active");
+    loadReplicationStatus();
   }
 }
 
@@ -324,4 +328,140 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+// 6. REPLICATION & FAILOVER DEMO LOGIC
+async function loadReplicationStatus() {
+  const container = document.getElementById("replicationNodesGrid");
+  container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 20px;">Đang thăm dò trạng thái các node trong Replica Set...</div>`;
+
+  try {
+    const res = await fetch("/api/replication/status");
+    const data = await res.json();
+    container.innerHTML = "";
+
+    (data.nodes || []).forEach(node => {
+      const card = document.createElement("div");
+      card.className = "movie-card";
+
+      let statusBadge = "";
+      let borderColor = "var(--border-color)";
+      let btnActionHtml = "";
+
+      if (node.state === "PRIMARY") {
+        statusBadge = `<span class="badge" style="background:#eaf5ea; color:#1e6b22; font-weight:700; font-size:0.85rem;">👑 PRIMARY (Ghi & Đọc)</span>`;
+        borderColor = "#9ac596";
+        btnActionHtml = `
+          <button class="btn btn-danger btn-sm" onclick="toggleNode('${node.container}', 'stop')">
+            🛑 Tắt Container (Giả lập chết)
+          </button>
+        `;
+      } else if (node.state === "SECONDARY") {
+        statusBadge = `<span class="badge" style="background:#eef2f9; color:#224a86; font-weight:600; font-size:0.85rem;">🔄 SECONDARY (Sao chép)</span>`;
+        borderColor = "#b5c7e4";
+        btnActionHtml = `
+          <button class="btn btn-outline btn-sm" onclick="toggleNode('${node.container}', 'stop')">
+            🛑 Tắt Container
+          </button>
+        `;
+      } else {
+        statusBadge = `<span class="badge" style="background:#fceeee; color:#a12626; font-weight:700; font-size:0.85rem;">❌ DOWN (Không hoạt động)</span>`;
+        borderColor = "#e8b4b4";
+        btnActionHtml = `
+          <button class="btn btn-primary btn-sm" style="background:#2f6b29;" onclick="toggleNode('${node.container}', 'start')">
+            ▶️ Bật lại Container
+          </button>
+        `;
+      }
+
+      card.style.borderColor = borderColor;
+      card.innerHTML = `
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <h3 style="font-size:1.05rem; font-weight:700;">Node: ${node.name}</h3>
+            <span>${statusBadge}</span>
+          </div>
+
+          <div style="font-size:0.85rem; color:var(--text-muted); line-height:1.7; margin-bottom:12px;">
+            <div><strong>Host Port:</strong> <code>${node.port}</code></div>
+            <div><strong>Container:</strong> <code>${node.container}</code></div>
+            <div><strong>Độ trễ ping:</strong> ${node.pingMs !== null ? `${node.pingMs} ms` : "N/A"}</div>
+            <div><strong>Số tài liệu (Movies):</strong> <strong style="color:var(--accent-dark);">${node.movieCount ? node.movieCount.toLocaleString() : 0}</strong></div>
+          </div>
+        </div>
+
+        <div class="movie-actions" style="margin-top:auto; padding-top:10px; border-top:1px solid var(--border-color); display:flex; justify-content:flex-end;">
+          ${btnActionHtml}
+        </div>
+      `;
+
+      container.appendChild(card);
+    });
+
+  } catch (err) {
+    container.innerHTML = `<div style="grid-column: 1/-1; color: var(--danger-text); padding: 20px;">Lỗi kết nối API Replication: ${err.message}</div>`;
+  }
+}
+
+async function toggleNode(containerName, action) {
+  const confirmMsg = action === "stop" 
+    ? `Bạn có chắc muốn tắt container "${containerName}"? Replica Set sẽ phải tự bầu chọn lại nếu đây là Primary.`
+    : `Bật lại container "${containerName}"?`;
+  
+  if (!confirm(confirmMsg)) return;
+
+  showToast(`Đang thực hiện docker ${action} ${containerName}...`);
+  try {
+    const res = await fetch("/api/replication/node-action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ container: containerName, action })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message || "Thao tác thành công!");
+      // Chờ 2 giây để MongoDB cập nhật trạng thái bầu chọn
+      setTimeout(() => {
+        loadReplicationStatus();
+        checkClusterStatus();
+      }, 2000);
+    } else {
+      alert("Lỗi: " + (data.error || "Không thể thực thi lệnh docker"));
+    }
+  } catch (err) {
+    alert("Lỗi mạng khi điều khiển container");
+  }
+}
+
+async function triggerSyncTest() {
+  const box = document.getElementById("syncTestResult");
+  box.style.display = "block";
+  box.textContent = "// Đang ghi 1 document vào Primary và kiểm tra nhân bản trên các node...";
+
+  try {
+    const res = await fetch("/api/replication/sync-test", { method: "POST" });
+    const data = await res.json();
+
+    if (res.ok) {
+      let lines = [
+        `✅ ${data.message}`,
+        `Document Title: "${data.test_title}"`,
+        `Inserted ID: ObjectId("${data.inserted_id}")`,
+        `\nKết quả kiểm tra đồng bộ từng Node:`
+      ];
+
+      (data.results || []).forEach(r => {
+        const icon = r.replicated ? "✅ ĐÃ ĐỒNG BỘ" : "❌ CHƯA CÓ / NODE DOWN";
+        lines.push(`  - [${r.node}:${r.port}] (${r.state}) -> ${icon}`);
+      });
+
+      box.textContent = lines.join("\n");
+      showToast("Đã hoàn tất kiểm tra đồng bộ replication!");
+      loadReplicationStatus();
+    } else {
+      box.textContent = `❌ Lỗi: ${data.error || "Không thể kiểm tra đồng bộ"}`;
+    }
+  } catch (err) {
+    box.textContent = `❌ Lỗi mạng: ${err.message}`;
+  }
 }

@@ -22,8 +22,9 @@
 
   <!-- Navigation Tabs -->
   <nav class="tabs">
-    <button class="tab-btn active" onclick="switchTab('crud')">1. CRUD Phim (Movies)</button>
+    <button class="tab-btn active" onclick="switchTab('crud')">1. CRUD & Text Search</button>
     <button class="tab-btn" onclick="switchTab('aggregation')">2. Aggregation Pipeline</button>
+    <button class="tab-btn" onclick="switchTab('replication')">3. Replica Set & High Availability</button>
   </nav>
 
   <!-- TAB 1: CRUD -->
@@ -103,6 +104,51 @@
         <span id="aggTime" style="font-size: 0.8rem; color: var(--text-muted);"></span>
       </div>
       <div id="aggResultTableContainer" style="overflow-x: auto;"></div>
+    </section>
+  </main>
+
+  <!-- TAB 3: REPLICATION -->
+  <main id="replicationTab" class="tab-content">
+    <section class="card">
+      <div class="card-title">
+        <span>Kiến trúc Replica Set 3 Node (`rsMflix`)</span>
+        <button class="btn btn-outline btn-sm" onclick="loadReplicationStatus()">🔄 Làm mới trạng thái</button>
+      </div>
+
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
+        Trang này minh họa cơ chế <strong>Replication (Đồng bộ dữ liệu)</strong> và <strong>Automatic Failover (Bầu chọn Primary khi có sự cố)</strong> của MongoDB.
+      </p>
+
+      <!-- 3 Node Cards Grid -->
+      <div class="movie-grid" id="replicationNodesGrid">
+        <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 20px;">
+          Đang tải thông tin các node...
+        </div>
+      </div>
+
+      <!-- Live Sync Test Section -->
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-dark);">
+          ⚡ Demo 1: Kiểm tra Đồng bộ Dữ liệu Tức thời (Write to Primary & Replicate to Secondaries)
+        </h4>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+          Ghi 1 bản ghi mới vào node <strong>PRIMARY</strong>, sau đó hệ thống sẽ ngay lập tức kết nối trực tiếp đến từng <strong>SECONDARY</strong> để kiểm tra bản ghi đã được sao chép sang hay chưa.
+        </p>
+        <button class="btn btn-primary btn-sm" onclick="triggerSyncTest()">Thực hiện kiểm tra đồng bộ (Sync Test)</button>
+        <div id="syncTestResult" class="code-box" style="display: none; margin-top: 12px;"></div>
+      </div>
+
+      <!-- Failover Simulation Section -->
+      <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-dark);">
+          🛡️ Demo 2: Thử nghiệm High Availability (Bầu chọn lại Primary khi Leader chết)
+        </h4>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+          1. Nhấn nút <strong>"Tắt Container (Dừng Node)"</strong> ở node đang là <code>PRIMARY</code> phía trên.<br>
+          2. Quan sát: Replica Set sẽ tự động nhận diện và các node <code>SECONDARY</code> còn lại tiến hành bỏ phiếu bầu chọn một <strong>PRIMARY mới</strong> trong ~5-10 giây.<br>
+          3. Nhấn <strong>"Bật lại Container"</strong>: Node cũ sẽ gia nhập lại cụm và tự động trở thành <code>SECONDARY</code>, bắt kịp oplog.
+        </p>
+      </div>
     </section>
   </main>
 

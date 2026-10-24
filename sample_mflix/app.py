@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from bson import ObjectId
 from flask import Flask, render_template, request, jsonify
+import pymongo
 from pymongo import MongoClient
 
 app = Flask(__name__)
@@ -371,6 +372,157 @@ def agg_custom():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+# ==========================================
+# 3. REPLICATION DEMO APIS
+# ==========================================
+
+NODES_CONFIG = [
+    {"name": "mflix1", "port": 27030, "container": "mflix1"},
+    {"name": "mflix2", "port": 27031, "container": "mflix2"},
+    {"name": "mflix3", "port": 27032, "container": "mflix3"}
+]
+
+@app.route("/api/replication/status", methods=["GET"])
+def get_replication_status():
+    """Lấy trạng thái chi tiết của từng Node trong Replica Set (Primary/Secondary/Down) và số lượng document"""
+    nodes_info = []
+    rs_summary = {}
+
+    # Thử lấy rs.status() từ một node đang sống
+    for cfg in NODES_CONFIG:
+        try:
+            c = MongoClient(f"mongodb://localhost:{cfg['port']}/?directConnection=true", serverSelectionTimeoutMS=800)
+            status_cmd = c.admin.command("replSetGetStatus")
+            rs_summary["set"] = status_cmd.get("set")
+            rs_summary["date"] = status_cmd.get("date")
+            break
+        except Exception:
+            continue
+
+    for cfg in NODES_CONFIG:
+        node_res = {
+            "name": cfg["name"],
+            "port": cfg["port"],
+            "container": cfg["container"],
+            "state": "DOWN",
+            "isPrimary": False,
+            "isSecondary": False,
+            "movieCount": 0,
+            "optime": None,
+            "pingMs": None,
+            "error": None
+        }
+        try:
+            import time
+            start = time.perf_counter()
+            c = MongoClient(
+                f"mongodb://localhost:{cfg['port']}/?directConnection=true",
+                serverSelectionTimeoutMS=1000
+            )
+            is_master = c.admin.command("isMaster")
+            node_res["pingMs"] = round((time.perf_counter() - start) * 1000, 1)
+
+            if is_master.get("ismaster"):
+                node_res["state"] = "PRIMARY"
+                node_res["isPrimary"] = True
+            elif is_master.get("secondary"):
+                node_res["state"] = "SECONDARY"
+                node_res["isSecondary"] = True
+            else:
+                node_res["state"] = "OTHER"
+
+            # Đọc số lượng phim từ node này (với Secondary cần readPreference='secondaryPreferred')
+            db_node = c.get_database("sample_mflix", read_preference=pymongo.read_preferences.ReadPreference.SECONDARY_PREFERRED)
+            node_res["movieCount"] = db_node.movies.count_documents({})
+        except Exception as e:
+            node_res["state"] = "DOWN"
+            node_res["error"] = str(e)
+
+        nodes_info.append(node_res)
+
+    return jsonify({
+        "nodes": nodes_info,
+        "summary": rs_summary
+    })
+
+@app.route("/api/replication/node-action", methods=["POST"])
+def toggle_node():
+    """Điều khiển dừng hoặc khởi động container Docker tương ứng với node (để demo Failover / High Availability)"""
+    import subprocess
+    data = request.json or {}
+    container = data.get("container")
+    action = data.get("action")  # 'stop' hoặc 'start'
+
+    if container not in ["mflix1", "mflix2", "mflix3"]:
+        return jsonify({"error": "Tên container không hợp lệ"}), 400
+    if action not in ["stop", "start"]:
+        return jsonify({"error": "Hành động chỉ có thể là stop hoặc start"}), 400
+
+    try:
+        cmd = ["docker", action, container]
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return jsonify({
+            "message": f"Đã thực hiện lệnh: {' '.join(cmd)} thành công!",
+            "container": container,
+            "action": action
+        })
+    except Exception as e:
+        return jsonify({"error": f"Lỗi khi thực thi docker: {str(e)}"}), 500
+
+@app.route("/api/replication/sync-test", methods=["POST"])
+def replication_sync_test():
+    """Ghi 1 document vào Primary và kiểm tra xem cả 3 node đã đồng bộ (Replicated) chưa"""
+    try:
+        test_title = f"Replication Test Record - {datetime.utcnow().strftime('%H:%M:%S')}"
+        doc = {
+            "title": test_title,
+            "year": 2026,
+            "genres": ["Test", "Replication"],
+            "plot": "Document dùng để kiểm tra tính năng đồng bộ dữ liệu tự động giữa Primary và Secondary.",
+            "isReplicationTest": True,
+            "createdAt": datetime.utcnow()
+        }
+
+        # Ghi vào Primary qua kết nối thông thường
+        insert_res = db.movies.insert_one(doc)
+        inserted_id = str(insert_res.inserted_id)
+
+        # Kiểm tra sự tồn tại trên từng node
+        import time
+        time.sleep(0.3)  # Đợi replication lag nhỏ
+
+        check_results = []
+        for cfg in NODES_CONFIG:
+            found = False
+            state = "DOWN"
+            try:
+                c = MongoClient(f"mongodb://localhost:{cfg['port']}/?directConnection=true", serverSelectionTimeoutMS=800)
+                db_node = c.get_database("sample_mflix", read_preference=pymongo.read_preferences.ReadPreference.SECONDARY_PREFERRED)
+                res = db_node.movies.find_one({"_id": ObjectId(inserted_id)})
+                if res:
+                    found = True
+                is_master = c.admin.command("isMaster")
+                state = "PRIMARY" if is_master.get("ismaster") else ("SECONDARY" if is_master.get("secondary") else "OTHER")
+            except Exception:
+                found = False
+                state = "DOWN"
+
+            check_results.append({
+                "node": cfg["name"],
+                "port": cfg["port"],
+                "state": state,
+                "replicated": found
+            })
+
+        return jsonify({
+            "message": "Đã ghi dữ liệu vào PRIMARY và kiểm tra đồng bộ sang các SECONDARY!",
+            "test_title": test_title,
+            "inserted_id": inserted_id,
+            "results": check_results
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
