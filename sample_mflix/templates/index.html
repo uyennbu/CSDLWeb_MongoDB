@@ -1,18 +1,20 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MongoDB Sample Mflix Demo</title>
+  <title>MongoDB Demo</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
 
   <!-- Header -->
   <header>
     <div class="brand">
-      <h1>MongoDB Sample Mflix Demo</h1>
-      <p>Trực quan hóa truy vấn CRUD & Aggregation Pipeline trên MongoDB Replica Set</p>
+      <h1>MongoDB Film Demo</h1>
+      <p>Demo truy vấn cơ bản trên MongoDB</p>
     </div>
     <div class="cluster-badge" id="clusterStatus">
       <span class="status-dot"></span>
@@ -24,8 +26,8 @@
   <nav class="tabs">
     <button class="tab-btn active" onclick="switchTab('crud')">1. CRUD & Text Search</button>
     <button class="tab-btn" onclick="switchTab('aggregation')">2. Aggregation Pipeline</button>
-    <button class="tab-btn" onclick="switchTab('replication')">3. Replica Set & HA</button>
-    <button class="tab-btn" onclick="switchTab('sharding')">4. Sharding & Scale-Out</button>
+    <button class="tab-btn" onclick="switchTab('replication')">3. Replication</button>
+    <button class="tab-btn" onclick="switchTab('sharding')">4. Sharding</button>
   </nav>
 
   <!-- TAB 1: CRUD -->
@@ -33,24 +35,25 @@
     <!-- Search & Filter Card -->
     <section class="card">
       <div class="card-title">
-        <span>Tìm kiếm & Bộ lọc (Read)</span>
+        <span>Tìm kiếm</span>
         <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ Thêm phim mới (Create)</button>
       </div>
 
       <div class="form-row">
         <div class="form-group" style="flex: 2;">
-          <label>Từ khóa tìm kiếm:</label>
-          <input type="text" id="searchInput" placeholder="Ví dụ: space war, detective murder, godfather..." onkeyup="if(event.key==='Enter') searchMovies()">
+          <label>Từ khóa:</label>
+          <input type="text" id="searchInput" placeholder="Ví dụ: space war, detective murder, godfather..."
+            onkeyup="if(event.key==='Enter') searchMovies()">
         </div>
         <div class="form-group" style="flex: 1.2;">
-          <label>Chế độ tìm kiếm (Search Mode):</label>
+          <label>Chế độ tìm kiếm:</label>
           <select id="searchModeSelect" onchange="searchMovies()">
-            <option value="text">🔍 MongoDB Full-Text Search ($text)</option>
-            <option value="regex">🔤 Regex thông thường (Chỉ tiêu đề)</option>
+            <option value="text">Full-Text Search</option>
+            <option value="regex">Regex thông thường</option>
           </select>
         </div>
         <div class="form-group" style="flex: 1;">
-          <label>Thể loại (Genre):</label>
+          <label>Thể loại:</label>
           <select id="genreSelect" onchange="searchMovies()">
             <option value="">-- Tất cả thể loại --</option>
           </select>
@@ -61,11 +64,12 @@
       </div>
 
       <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
-        💡 <em>Mẹo Text Search:</em> Tìm trên cả <strong>title</strong>, <strong>plot</strong>, <strong>cast</strong> và <strong>genres</strong> nhờ Text Index. Tự động chấm điểm độ liên quan (<code>textScore</code>).
+        💡 <em>Text Search:</em> Tìm trên cả <strong>title</strong>, <strong>plot</strong>, <strong>cast</strong> và
+        <strong>genres</strong> nhờ Text Index. Tự động chấm điểm độ liên quan (<code>textScore</code>).
       </div>
 
       <div id="queryExplanation" class="code-box" style="display:none;"></div>
-      
+
       <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 8px;">
         Tìm thấy: <strong id="totalCount">0</strong> phim
       </div>
@@ -78,30 +82,30 @@
   <!-- TAB 2: AGGREGATION -->
   <main id="aggregationTab" class="tab-content">
     <section class="card">
-      <div class="card-title">Minh họa MongoDB Aggregation Pipeline</div>
+      <div class="card-title">MongoDB Aggregation Pipeline</div>
       <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 14px;">
-        Chọn một kịch bản phân tích mẫu để xem pipeline và kết quả thực thi:
+        Chọn một truy vấn và xem kết quả:
       </p>
 
       <div class="agg-tabs">
         <button class="btn btn-outline" id="btnAgg1" onclick="runAgg(1)">
-          Pipeline 1: $unwind + $group (Top thể loại)
+          Thống kê theo thể loại: $unwind + $group
         </button>
         <button class="btn btn-outline" id="btnAgg2" onclick="runAgg(2)">
-          Pipeline 2: $match + $sort + $group (Phim đỉnh nhất mỗi năm)
+          Phim hay nhất mỗi năm: $match + $sort + $group
         </button>
         <button class="btn btn-outline" id="btnAgg3" onclick="runAgg(3)">
-          Pipeline 3: $lookup (JOIN Movies & Comments)
+          Join bảng Movies & Comments: $lookup
         </button>
       </div>
 
       <!-- Pipeline Code Display -->
-      <label>MongoDB Pipeline Syntax:</label>
-      <div class="code-box" id="pipelineBox">// Nhấp một kịch bản phía trên để xem Pipeline...</div>
+      <label>Nội dung truy vấn:</label>
+      <div class="code-box" id="pipelineBox">// Chọn một truy vấn phía trên để xem nội dung...</div>
 
       <!-- Result Container -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
-        <h4 id="aggResultTitle" style="font-size: 0.95rem; color: var(--accent-dark);">Kết quả truy vấn:</h4>
+        <h4 id="aggResultTitle" style="font-size: 0.95rem; color: var(--accent-dark);">Kết quả:</h4>
         <span id="aggTime" style="font-size: 0.8rem; color: var(--text-muted);"></span>
       </div>
       <div id="aggResultTableContainer" style="overflow-x: auto;"></div>
@@ -112,12 +116,12 @@
   <main id="replicationTab" class="tab-content">
     <section class="card">
       <div class="card-title">
-        <span>Kiến trúc Replica Set 3 Node (`rsMflix`)</span>
+        <span>Kiến trúc Replica Set 3 Node</span>
         <button class="btn btn-outline btn-sm" onclick="loadReplicationStatus()">🔄 Làm mới trạng thái</button>
       </div>
 
       <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
-        Trang này minh họa cơ chế <strong>Replication (Đồng bộ dữ liệu)</strong> và <strong>Automatic Failover (Bầu chọn Primary khi có sự cố)</strong> của MongoDB.
+        Minh họa cơ chế <strong>Replication</strong> và <strong> bầu chọn Primary khi có sự cố</strong> của MongoDB.
       </p>
 
       <!-- 3 Node Cards Grid -->
@@ -130,24 +134,28 @@
       <!-- Live Sync Test Section -->
       <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
         <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-dark);">
-          ⚡ Demo 1: Kiểm tra Đồng bộ Dữ liệu Tức thời (Write to Primary & Replicate to Secondaries)
+          Demo 1: Kiểm tra Đồng bộ Dữ liệu Tức thời (Write to Primary & Replicate to Secondaries)
         </h4>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
-          Ghi 1 bản ghi mới vào node <strong>PRIMARY</strong>, sau đó hệ thống sẽ ngay lập tức kết nối trực tiếp đến từng <strong>SECONDARY</strong> để kiểm tra bản ghi đã được sao chép sang hay chưa.
+          Ghi 1 bản ghi mới vào node <strong>PRIMARY</strong>, sau đó hệ thống sẽ ngay lập tức kết nối trực tiếp đến
+          từng <strong>SECONDARY</strong> để kiểm tra bản ghi đã được sao chép sang hay chưa.
         </p>
-        <button class="btn btn-primary btn-sm" onclick="triggerSyncTest()">Thực hiện kiểm tra đồng bộ (Sync Test)</button>
+        <button class="btn btn-primary btn-sm" onclick="triggerSyncTest()">Thực hiện kiểm tra đồng bộ (Sync
+          Test)</button>
         <div id="syncTestResult" class="code-box" style="display: none; margin-top: 12px;"></div>
       </div>
 
       <!-- Failover Simulation Section -->
       <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
         <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-dark);">
-          🛡️ Demo 2: Thử nghiệm High Availability (Bầu chọn lại Primary khi Leader chết)
+          Demo 2: Thử nghiệm High Availability (Bầu chọn lại Primary khi Leader chết)
         </h4>
         <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
           1. Nhấn nút <strong>"Tắt Container (Dừng Node)"</strong> ở node đang là <code>PRIMARY</code> phía trên.<br>
-          2. Quan sát: Replica Set sẽ tự động nhận diện và các node <code>SECONDARY</code> còn lại tiến hành bỏ phiếu bầu chọn một <strong>PRIMARY mới</strong> trong ~5-10 giây.<br>
-          3. Nhấn <strong>"Bật lại Container"</strong>: Node cũ sẽ gia nhập lại cụm và tự động trở thành <code>SECONDARY</code>, bắt kịp oplog.
+          2. Quan sát: Replica Set sẽ tự động nhận diện và các node <code>SECONDARY</code> còn lại tiến hành bỏ phiếu
+          bầu chọn một <strong>PRIMARY mới</strong> trong ~5-10 giây.<br>
+          3. Nhấn <strong>"Bật lại Container"</strong>: Node cũ sẽ gia nhập lại cụm và tự động trở thành
+          <code>SECONDARY</code>, bắt kịp oplog.
         </p>
       </div>
     </section>
@@ -157,30 +165,38 @@
   <main id="shardingTab" class="tab-content">
     <section class="card">
       <div class="card-title">
-        <span>Kiến trúc MongoDB Sharding Cluster</span>
+        <span>MongoDB Sharding Cluster</span>
         <button class="btn btn-outline btn-sm" onclick="loadShardingStatus()">🔄 Cập nhật phân bổ Shard</button>
       </div>
 
       <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
-        <strong>Sharding (Phân mảnh ngang):</strong> Chia nhỏ tập dữ liệu 21.349 phim ra 3 Shard độc lập dựa trên <strong>Shard Key: <code>year</code></strong>.
-        Client chỉ làm việc với <strong>mongos router</strong>, mongos tra cứu metadata trên <strong>Config Server (<code>cfgRS</code>)</strong> để chuyển tiếp truy vấn.
+        <strong>Sharding (Phân mảnh):</strong> Chia nhỏ tập dữ liệu 21.349 phim ra 3 Shard độc lập dựa trên
+        <strong>Shard Key: <code>year</code></strong>.
+        Client chỉ làm việc với <strong>mongos router</strong>, mongos tra cứu metadata trên <strong>Config Server
+          (<code>cfgRS</code>)</strong> để chuyển tiếp truy vấn.
       </p>
 
       <!-- Architecture Flow Diagram Card -->
-      <div style="background: var(--code-bg); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 14px; margin-bottom: 20px;">
+      <div
+        style="background: var(--code-bg); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 14px; margin-bottom: 20px;">
         <div style="font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; color: var(--accent-dark);">
           Sơ đồ luồng truy vấn Sharded Cluster:
         </div>
         <div style="font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.6; color: #444;">
-          Client / Web App ──▶ <strong>mongos (Router)</strong> ──[Tra cứu Metadata]──▶ <strong>Config Server (cfg1:27017)</strong><br>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── [year &lt; 1980]&nbsp;&nbsp;&nbsp;──▶ <strong>Shard 1</strong> (shard1RS)<br>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── [1980..2000)&nbsp;&nbsp;──▶ <strong>Shard 2</strong> (shard2RS)<br>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── [year &gt;= 2000]──▶ <strong>Shard 3</strong> (shard3RS)
+          Client / Web App ──▶ <strong>mongos (Router)</strong> ──[Tra cứu Metadata]──▶ <strong>Config Server
+            (cfg1:27017)</strong><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├──
+          [year &lt; 1980]&nbsp;&nbsp;&nbsp;──▶ <strong>Shard 1</strong> (shard1RS)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├──
+          [1980..2000)&nbsp;&nbsp;──▶ <strong>Shard 2</strong> (shard2RS)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└──
+          [year &gt;= 2000]──▶ <strong>Shard 3</strong> (shard3RS)
         </div>
       </div>
 
       <!-- 3 Shards Distribution Cards -->
-      <h4 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--accent-dark);">Phân bổ tài liệu trên từng Shard (Shard Distribution):</h4>
+      <h4 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--accent-dark);">Phân bổ tài liệu trên từng Shard
+        (Shard Distribution):</h4>
       <div class="movie-grid" id="shardsGrid">
         <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 20px;">
           Đang tính toán phân bổ trên các shard...
@@ -190,7 +206,7 @@
       <!-- Demo Routing Query Section -->
       <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
         <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-dark);">
-          ⚡ Demo 1: So sánh Định tuyến Targeted vs Scatter-Gather Query
+          Demo 1: So sánh Định tuyến Targeted vs Scatter-Gather Query
         </h4>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
           Chọn một kiểu truy vấn để xem <code>mongos</code> định tuyến đến những Shard nào:
@@ -198,13 +214,13 @@
 
         <div class="agg-tabs">
           <button class="btn btn-outline" id="btnRouteSingle" onclick="testRoute('targeted_single')">
-            🎯 1. Targeted Query (Có Shard Key: year = 1995)
+            1. Truy vấn dựa trên shard key, chỉ truy cập đến 1 shard (Shard Key: year = 1995)
           </button>
           <button class="btn btn-outline" id="btnRouteRange" onclick="testRoute('targeted_range')">
-            ↔️ 2. Targeted Range Query (Khoảng năm: 1975 - 1985)
+            2. Truy vấn dựa trên shard key, truy cập đến nhiều shard (Khoảng năm: 1975 - 1985)
           </button>
           <button class="btn btn-outline" id="btnRouteScatter" onclick="testRoute('scatter_gather')">
-            📢 3. Scatter-Gather Query (KHÔNG Shard Key: genres="Action")
+            3. Truy vấn không dựa trên shard key
           </button>
         </div>
 
@@ -214,7 +230,7 @@
       <!-- Demo Routing Insert Section -->
       <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
         <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-dark);">
-          📝 Demo 2: Định tuyến tự động khi Ghi (Insert Routing by Shard Key)
+          Demo 2: Định tuyến tự động khi Ghi (Insert Routing by Shard Key)
         </h4>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">
           Nhập năm phát hành để xem router sẽ gửi bản ghi vào Shard nào:
@@ -242,7 +258,7 @@
     <div class="modal">
       <h3 class="card-title" id="modalTitle">Thêm phim mới (Create)</h3>
       <input type="hidden" id="editMovieId">
-      
+
       <div class="form-group" style="margin-bottom: 10px;">
         <label>Tiêu đề phim (*):</label>
         <input type="text" id="movieTitleInput" placeholder="Nhập tên phim">
@@ -281,4 +297,5 @@
 
   <script src="/static/app.js"></script>
 </body>
+
 </html>

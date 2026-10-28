@@ -47,7 +47,7 @@ async function checkClusterStatus() {
     const res = await fetch("/api/status");
     const data = await res.json();
     if (data.status === "connected") {
-      document.getElementById("statusText").textContent = 
+      document.getElementById("statusText").textContent =
         `MongoDB Online (${data.counts.movies.toLocaleString()} phim, ${data.counts.comments.toLocaleString()} bình luận)`;
     } else {
       document.getElementById("statusText").textContent = "Lỗi kết nối MongoDB";
@@ -108,6 +108,8 @@ async function loadMovies(q = "", genre = "", mode = "text") {
       const card = document.createElement("div");
       card.className = "movie-card";
 
+      // Làm sạch hiển thị năm (loại bỏ ký tự lạ như 'è' trong dataset gốc: ví dụ '2010è' -> '2010', '1994è1998' -> '1994 - 1998')
+      const displayYear = formatYear(m.year);
       const rating = m.imdb && m.imdb.rating ? m.imdb.rating : "N/A";
       const genresHtml = (m.genres || []).map(g => `<span class="badge">${g}</span>`).join("");
       const plot = m.plot || "Chưa có tóm tắt nội dung.";
@@ -119,7 +121,7 @@ async function loadMovies(q = "", genre = "", mode = "text") {
             <h3>${escapeHtml(m.title)}</h3>
           </div>
           <div class="movie-meta">
-            <span>📅 ${m.year || "N/A"}</span>
+            <span>📅 ${displayYear}</span>
             <span>⭐ IMDb: <strong>${rating}</strong></span>
             ${scoreBadge}
           </div>
@@ -155,7 +157,9 @@ function openEditModal(movie) {
   document.getElementById("modalTitle").textContent = "Chỉnh sửa phim (Update - updateOne)";
   document.getElementById("editMovieId").value = movie._id;
   document.getElementById("movieTitleInput").value = movie.title || "";
-  document.getElementById("movieYearInput").value = movie.year || 2026;
+  // Làm sạch năm nếu có ký tự lạ
+  const cleanYear = parseInt(String(movie.year || "").replace(/[^\d]/g, "")) || 2026;
+  document.getElementById("movieYearInput").value = cleanYear;
   document.getElementById("movieRatingInput").value = movie.imdb?.rating || 7.0;
   document.getElementById("movieGenresInput").value = (movie.genres || []).join(", ");
   document.getElementById("moviePlotInput").value = movie.plot || "";
@@ -249,7 +253,7 @@ async function runAgg(type) {
   const pipelineBox = document.getElementById("pipelineBox");
   const container = document.getElementById("aggResultTableContainer");
   const titleEl = document.getElementById("aggResultTitle");
-  
+
   pipelineBox.textContent = "// Đang thực thi aggregation...";
   container.innerHTML = `<div style="padding: 20px; color: var(--text-muted);">Đang truy vấn MongoDB...</div>`;
 
@@ -334,6 +338,18 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+function formatYear(yearVal) {
+  if (!yearVal) return "N/A";
+  let s = String(yearVal).trim();
+  // Nếu có dạng khoảng năm bị dính 'è' như '1994è1998' -> đổi thành '1994 - 1998'
+  if (/^\d{4}è\d{4}$/.test(s)) {
+    return s.replace("è", " - ");
+  }
+  // Loại bỏ ký tự lạ 'è' hoặc các ký tự không phải số ở cuối như '2010è' -> '2010'
+  s = s.replace(/è/g, "").replace(/[^\d\s-]/g, "").trim();
+  return s || "N/A";
+}
+
 // 6. REPLICATION & FAILOVER DEMO LOGIC
 async function loadReplicationStatus() {
   const container = document.getElementById("replicationNodesGrid");
@@ -357,7 +373,7 @@ async function loadReplicationStatus() {
         borderColor = "#9ac596";
         btnActionHtml = `
           <button class="btn btn-danger btn-sm" onclick="toggleNode('${node.container}', 'stop')">
-            🛑 Tắt Container (Giả lập chết)
+            🛑 Tắt Container
           </button>
         `;
       } else if (node.state === "SECONDARY") {
@@ -408,10 +424,10 @@ async function loadReplicationStatus() {
 }
 
 async function toggleNode(containerName, action) {
-  const confirmMsg = action === "stop" 
+  const confirmMsg = action === "stop"
     ? `Bạn có chắc muốn tắt container "${containerName}"? Replica Set sẽ phải tự bầu chọn lại nếu đây là Primary.`
     : `Bật lại container "${containerName}"?`;
-  
+
   if (!confirm(confirmMsg)) return;
 
   showToast(`Đang thực hiện docker ${action} ${containerName}...`);
@@ -538,13 +554,13 @@ async function testRoute(queryType) {
 
     if (res.ok) {
       const output = [
-        `📌 Kiểu truy vấn: ${data.queryType}`,
+        `Kiểu truy vấn: ${data.queryType}`,
         `Cú pháp truy vấn mẫu: db.movies.find(${JSON.stringify(data.sampleQuery)})`,
-        `\n🧭 Quyết định của mongos Router:`,
-        `  - Giai đoạn thực thi (Explain stage): ${data.routingStage}`,
+        `\nMongos Router:`,
+        `  - Routing: ${data.routingStage}`,
         `  - Shard(s) được gửi truy vấn tới: [ ${data.targetedShards.join(", ")} ]`,
         `  - Đánh giá hiệu năng: ${data.performance}`,
-        `\n💡 Giải thích chi tiết:\n${data.explanation}`
+        `\nGiải thích:\n${data.explanation}`
       ];
       box.textContent = output.join("\n");
     } else {
@@ -576,8 +592,8 @@ async function simulateInsertRoute() {
       const output = [
         `✅ ${data.message}`,
         `Shard Key giá trị: ${JSON.stringify(data.shardKey)}`,
-        `Shard được phân bổ lưu trữ: 🎯 ${data.assignedShard}`,
-        `Nguyên tắc phân vùng (Partitioning rule): ${data.rule}`
+        `Shard được phân bổ lưu trữ: ${data.assignedShard}`,
+        `Nguyên tắc phân vùng: ${data.rule}`
       ];
       box.textContent = output.join("\n");
       showToast(`Bản ghi được gán về ${data.assignedShard}`);

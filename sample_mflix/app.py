@@ -39,6 +39,11 @@ def serialize_doc(doc):
                 new_doc[k] = str(v)
             elif isinstance(v, datetime):
                 new_doc[k] = v.isoformat()
+            elif k == "year" and isinstance(v, str):
+                # Làm sạch dữ liệu năm bị dính ký tự lạ trong sample data (ví dụ '2010è' -> 2010)
+                cleaned = v.replace("è", " ").strip()
+                digits = "".join([c for c in cleaned if c.isdigit()])
+                new_doc[k] = int(digits[:4]) if len(digits) >= 4 else v
             elif isinstance(v, (dict, list)):
                 new_doc[k] = serialize_doc(v)
             else:
@@ -532,25 +537,25 @@ def replication_sync_test():
 SHARD_RANGES = [
     {
         "id": "shard1RS",
-        "name": "Shard 1 (shard1RS)",
+        "name": "Shard 1",
         "host": "shard1:27017",
-        "keyRange": "year < 1980 (Phim cổ điển)",
+        "keyRange": "year < 1980",
         "description": "Lưu trữ các bộ phim phát hành trước năm 1980",
         "filter": {"year": {"$lt": 1980}}
     },
     {
         "id": "shard2RS",
-        "name": "Shard 2 (shard2RS)",
+        "name": "Shard 2",
         "host": "shard2:27017",
-        "keyRange": "1980 <= year < 2000 (Thời kỳ hoàng kim)",
+        "keyRange": "1980 <= year < 2000",
         "description": "Lưu trữ các bộ phim từ năm 1980 đến 1999",
         "filter": {"year": {"$gte": 1980, "$lt": 2000}}
     },
     {
         "id": "shard3RS",
-        "name": "Shard 3 (shard3RS)",
+        "name": "Shard 3",
         "host": "shard3:27017",
-        "keyRange": "year >= 2000 (Điện ảnh hiện đại)",
+        "keyRange": "year >= 2000",
         "description": "Lưu trữ các bộ phim từ năm 2000 trở đi",
         "filter": {"year": {"$gte": 2000}}
     }
@@ -558,7 +563,7 @@ SHARD_RANGES = [
 
 @app.route("/api/sharding/status", methods=["GET"])
 def get_sharding_status():
-    """Thống kê phân bổ dữ liệu Sharding theo Shard Key (giả lập hoặc kết nối sharding cluster thật nếu có)"""
+    """Thống kê phân bổ dữ liệu Sharding theo Shard Key"""
     try:
         shards_info = []
         total_movies = db.movies.count_documents({})
@@ -604,36 +609,36 @@ def explain_sharding_route():
             target_shard = "shard1RS" if year_val < 1980 else ("shard2RS" if year_val < 2000 else "shard3RS")
             sample_query = {"year": year_val}
             return jsonify({
-                "queryType": "Targeted Query (Single Shard Routing)",
-                "explanation": f"Truy vấn chứa chính xác Shard Key 'year = {year_val}'. Mongos tra cứu Config Server và gửi thẳng truy vấn tới DUY NHẤT 1 Shard mà không làm phiền các Shard khác.",
+                "queryType": "Truy cập 1 shard",
+                "explanation": f"Truy vấn dựa trên shard key 'year = {year_val}'. Mongos tra cứu Config Server và gửi thẳng truy vấn tới duy nhất 1 Shard.",
                 "routingStage": "SINGLE_SHARD",
                 "targetedShards": [target_shard],
                 "sampleQuery": sample_query,
-                "performance": "⚡ Cực nhanh (Tối ưu hóa tài nguyên mạng và CPU)"
+                "performance": "Nhanh nhất (Tối ưu hóa tài nguyên mạng và CPU)"
             })
 
         elif query_type == "targeted_range":
             # Ví dụ: find({ year: { $gte: 1975, $lte: 1985 } })
             sample_query = {"year": {"$gte": 1975, "$lte": 1985}}
             return jsonify({
-                "queryType": "Targeted Range Query (Multi-Shard Route)",
-                "explanation": "Truy vấn tìm theo khoảng năm (1975 - 1985), khoảng này vắt ngang qua Shard 1 (<1980) và Shard 2 (1980-1999). Mongos chỉ cần gửi yêu cầu đến đúng 2 Shard này và gộp kết quả.",
+                "queryType": "Truy vấn đến nhiều shard",
+                "explanation": "Truy vấn tìm theo khoảng năm (1975 - 1985), yêu cầu phải truy cập đến cả Shard 1 (<1980) và Shard 2 (1980-1999). Mongos gửi yêu cầu đến 2 Shard này và gộp kết quả.",
                 "routingStage": "SHARD_MERGE (2 Shards)",
                 "targetedShards": ["shard1RS", "shard2RS"],
                 "sampleQuery": sample_query,
-                "performance": "👍 Nhanh (Chỉ truy cập đúng các Shard chứa dữ liệu)"
+                "performance": "Nhanh (Chỉ truy cập đúng các Shard chứa dữ liệu)"
             })
 
         else:
             # Ví dụ: find({ genres: "Action" }) -> Không có shard key!
             sample_query = {"genres": "Action"}
             return jsonify({
-                "queryType": "Scatter-Gather Query (Phát tán toàn cụm)",
-                "explanation": "Truy vấn KHÔNG chứa Shard Key (tìm theo 'genres'). Mongos không biết phim nằm ở đâu nên BẮT BUỘC phải gửi truy vấn tới TẤT CẢ các Shard trong hệ thống (Broadcast), sau đó gom kết quả về sắp xếp.",
+                "queryType": "Truy vấn toàn bộ",
+                "explanation": "Truy vấn không chứa Shard Key (tìm theo 'genres'). Mongos không biết phim nằm ở đâu nên phải gửi truy vấn tới tất cả các Shard, sau đó gom kết quả về sắp xếp.",
                 "routingStage": "SHARD_MERGE (Broadcast all Shards)",
                 "targetedShards": ["shard1RS", "shard2RS", "shard3RS"],
                 "sampleQuery": sample_query,
-                "performance": "⚠️ Chậm và tốn tài nguyên (Cần tránh trong các hệ thống lớn)"
+                "performance": "Chậm và tốn tài nguyên (Cần tránh trong các hệ thống lớn)"
             })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
