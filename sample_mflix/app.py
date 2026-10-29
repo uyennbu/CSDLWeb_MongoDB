@@ -260,7 +260,13 @@ def agg_genres_stats():
                     "_id": "$genres",
                     "totalMovies": {"$sum": 1},
                     "avgRating": {"$avg": "$imdb.rating"},
-                    "maxRating": {"$max": "$imdb.rating"}
+                    # Một số phim có imdb.rating = "" (chuỗi rỗng). Theo thứ tự so sánh BSON,
+                    # string > number nên $max sẽ trả về "" -> chỉ lấy giá trị kiểu số.
+                    "maxRating": {
+                        "$max": {
+                            "$cond": [{"$isNumber": "$imdb.rating"}, "$imdb.rating", None]
+                        }
+                    }
                 }
             },
             {"$match": {"totalMovies": {"$gte": 50}}},
@@ -320,45 +326,45 @@ def agg_top_rated_by_year():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/aggregate/movies-comments-lookup", methods=["GET"])
-def agg_movies_lookup():
-    """
-    Aggregation 3: $lookup (JOIN) nối bảng movies với comments
-    Lấy danh sách các phim có nhiều bình luận nhất
-    """
-    try:
-        pipeline = [
-            {
-                "$lookup": {
-                    "from": "comments",
-                    "localField": "_id",
-                    "foreignField": "movie_id",
-                    "as": "movie_comments"
-                }
-            },
-            {
-                "$project": {
-                    "title": 1,
-                    "year": 1,
-                    "genres": 1,
-                    "commentCount": {"$size": "$movie_comments"},
-                    "latestComment": {
-                        "$slice": ["$movie_comments.text", 2]
-                    }
-                }
-            },
-            {"$sort": {"commentCount": -1}},
-            {"$limit": 8}
-        ]
+# @app.route("/api/aggregate/movies-comments-lookup", methods=["GET"])
+# def agg_movies_lookup():
+    # """
+    # Aggregation 3: $lookup (JOIN) nối bảng movies với comments
+    # Lấy danh sách các phim có nhiều bình luận nhất
+    # """
+    # try:
+        # pipeline = [
+            # {
+                # "$lookup": {
+                    # "from": "comments",
+                    # "localField": "_id",
+                    # "foreignField": "movie_id",
+                    # "as": "movie_comments"
+                # }
+            # },
+            # {
+                # "$project": {
+                    # "title": 1,
+                    # "year": 1,
+                    # "genres": 1,
+                    # "commentCount": {"$size": "$movie_comments"},
+                    # "latestComment": {
+                        # "$slice": ["$movie_comments.text", 2]
+                    # }
+                # }
+            # },
+            # {"$sort": {"commentCount": -1}},
+            # {"$limit": 8}
+        # ]
 
-        result = list(db.movies.aggregate(pipeline))
-        return jsonify({
-            "title": "Lookup (JOIN): Phim có nhiều bình luận nhất từ collection 'comments'",
-            "pipeline": pipeline,
-            "result": serialize_doc(result)
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # result = list(db.movies.aggregate(pipeline))
+        # return jsonify({
+            # "title": "Lookup (JOIN): Phim có nhiều bình luận nhất từ collection 'comments'",
+            # "pipeline": pipeline,
+            # "result": serialize_doc(result)
+        # })
+    # except Exception as e:
+        # return jsonify({"error": str(e)}), 500
 
 @app.route("/api/aggregate/custom", methods=["POST"])
 def agg_custom():

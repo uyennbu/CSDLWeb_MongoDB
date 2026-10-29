@@ -244,7 +244,7 @@ async function deleteMovie(id, title) {
 async function runAgg(type) {
   document.getElementById("btnAgg1").className = type === 1 ? "btn btn-primary" : "btn btn-outline";
   document.getElementById("btnAgg2").className = type === 2 ? "btn btn-primary" : "btn btn-outline";
-  document.getElementById("btnAgg3").className = type === 3 ? "btn btn-primary" : "btn btn-outline";
+  // document.getElementById("btnAgg3").className = type === 3 ? "btn btn-primary" : "btn btn-outline";
 
   const pipelineBox = document.getElementById("pipelineBox");
   const container = document.getElementById("aggResultTableContainer");
@@ -257,7 +257,7 @@ async function runAgg(type) {
     let url = "";
     if (type === 1) url = "/api/aggregate/genres-stats";
     else if (type === 2) url = "/api/aggregate/top-rated-by-year?min_year=2000";
-    else if (type === 3) url = "/api/aggregate/movies-comments-lookup";
+    // else if (type === 3) url = "/api/aggregate/movies-comments-lookup";
 
     const startTime = performance.now();
     const res = await fetch(url);
@@ -285,13 +285,13 @@ async function runAgg(type) {
         { key: "votes", label: "Lượt vote", format: v => v?.toLocaleString() },
         { key: "genres", label: "Thể loại", format: v => (v || []).join(", ") }
       ]);
-    } else if (type === 3) {
-      renderTable(data.result, [
-        { key: "title", label: "Tên phim" },
-        { key: "year", label: "Năm" },
-        { key: "commentCount", label: "Số bình luận (Lookup)", format: v => `💬 ${v}` },
-        { key: "latestComment", label: "Bình luận trích dẫn mẫu", format: v => (v && v.length) ? `"${v[0]}"` : "—" }
-      ]);
+    // } else if (type === 3) {
+      // renderTable(data.result, [
+        // { key: "title", label: "Tên phim" },
+        // { key: "year", label: "Năm" },
+        // { key: "commentCount", label: "Số bình luận (Lookup)", format: v => `💬 ${v}` },
+        // { key: "latestComment", label: "Bình luận trích dẫn mẫu", format: v => (v && v.length) ? `"${v[0]}"` : "—" }
+      // ]);
     }
   } catch (err) {
     pipelineBox.textContent = "// Lỗi khi thực thi Aggregation";
