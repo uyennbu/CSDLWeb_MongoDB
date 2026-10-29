@@ -5,7 +5,7 @@ db.movies.insertMany([
 ]);
 
 // Tim cac document thu nghiem vua them 
-db.movies.find({is_test_data: true})
+db.movies.find({is_test_data: true});
 
 // Cập nhật nhiều document cùng lúc thỏa mãn điều kiện
 db.movies.updateMany(

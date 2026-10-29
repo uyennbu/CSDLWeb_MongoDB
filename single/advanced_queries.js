@@ -7,7 +7,7 @@ db.movies.createIndex(
 // Xóa 1 index
 db.movies.dropIndex(
     {year: 1}
-)
+);
 // Xóa toàn bộ các index
 db.movies.dropIndexes()
 // Xem các index hiện có
