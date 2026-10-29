@@ -590,7 +590,7 @@ async function simulateInsertRoute() {
 
     if (res.ok) {
       const output = [
-        `✅ ${data.message}`,
+        `${data.message}`,
         `Shard Key giá trị: ${JSON.stringify(data.shardKey)}`,
         `Shard được phân bổ lưu trữ: ${data.assignedShard}`,
         `Nguyên tắc phân vùng: ${data.rule}`
