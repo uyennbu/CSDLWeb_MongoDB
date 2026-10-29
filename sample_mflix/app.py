@@ -1,4 +1,6 @@
 import os
+import re
+import json
 from datetime import datetime
 from bson import ObjectId
 from flask import Flask, render_template, request, jsonify
@@ -50,6 +52,26 @@ def serialize_doc(doc):
                 new_doc[k] = v
         return new_doc
     return doc
+
+def to_shell(value):
+    """Chuyển dict/list Python sang cú pháp mongosh dễ đọc, ví dụ: { $text: { $search: "abc" } }"""
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        parts = []
+        for k, v in value.items():
+            key = k if re.fullmatch(r"[A-Za-z_$][\w$]*", k) else json.dumps(k)
+            parts.append(f"{key}: {to_shell(v)}")
+        return "{ " + ", ".join(parts) + " }"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(to_shell(v) for v in value) + "]"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "null"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
 
 @app.route("/")
 def index():
@@ -127,11 +149,17 @@ def list_movies():
         genres = db.movies.distinct("genres")
         clean_genres = sorted([g for g in genres if g and isinstance(g, str)])[:25]
 
-        # Mô tả câu lệnh MongoDB
-        if mode == "text" and q:
-            mongo_code = f"db.movies.find(\n  {{ $text: {{ $search: \"{q}\" }} }},\n  {{ title: 1, year: 1, score: {{ $meta: 'textScore' }} }}\n).sort({{ score: {{ $meta: 'textScore' }} }}).limit({limit})"
-        else:
-            mongo_code = f"db.movies.find({filter_query}, {{ title: 1, year: 1, genres: 1 }}).sort({{ year: -1 }}).limit({limit})"
+        # Mô tả câu lệnh MongoDB (sinh trực tiếp từ filter/projection/sort thật đã dùng ở trên)
+        sort_doc = {field: direction for field, direction in sort_criteria}
+        mongo_code = (
+            f"db.movies.find(\n"
+            f"  {to_shell(filter_query)},\n"
+            f"  {to_shell(projection)}\n"
+            f").sort({to_shell(sort_doc)})"
+            + (f".skip({skip})" if skip else "")
+            + f".limit({limit})"
+            + f"\n\n// Đếm tổng số kết quả:\ndb.movies.countDocuments({to_shell(filter_query)})"
+        )
 
         return jsonify({
             "total": total,

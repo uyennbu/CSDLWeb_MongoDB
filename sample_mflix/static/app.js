@@ -4,6 +4,8 @@ let currentGenres = [];
 document.addEventListener("DOMContentLoaded", () => {
   checkClusterStatus();
   loadMovies();
+  const modeSelect = document.getElementById("searchModeSelect");
+  toggleTextIndexInfo(modeSelect ? modeSelect.value : "text");
 });
 
 function switchTab(tabName) {
@@ -60,7 +62,15 @@ async function searchMovies() {
   const q = document.getElementById("searchInput").value;
   const genre = document.getElementById("genreSelect").value;
   const mode = document.getElementById("searchModeSelect") ? document.getElementById("searchModeSelect").value : "text";
+  toggleTextIndexInfo(mode);
   loadMovies(q, genre, mode);
+}
+
+// Hiển thị câu lệnh tạo Text Search Index (chỉ khi chọn chế độ Full-Text Search)
+function toggleTextIndexInfo(mode) {
+  const panel = document.getElementById("textIndexInfo");
+  if (!panel) return;
+  panel.style.display = mode === "text" ? "block" : "none";
 }
 
 async function loadMovies(q = "", genre = "", mode = "text") {

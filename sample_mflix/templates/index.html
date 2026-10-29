@@ -63,9 +63,32 @@
       </div>
 
       <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
-        💡 <em>Text Search:</em> Tìm trên cả <strong>title</strong>, <strong>plot</strong>, <strong>cast</strong> và
-        <strong>genres</strong> nhờ Text Index. Tự động chấm điểm độ liên quan (<code>textScore</code>).
+        💡 <em>Text Search:</em> Tìm trên cả <strong>title</strong>, <strong>plot</strong> và
+        <strong>fullplot</strong> nhờ Text Index. Tự động chấm điểm độ liên quan (<code>textScore</code>).
       </div>
+
+      <!-- Text Search Index Info (chỉ hiển thị khi chọn chế độ Full-Text Search) -->
+      <details id="textIndexInfo" class="code-box" style="display:none; font-family: inherit; white-space: normal;">
+        <summary style="cursor: pointer; font-weight: 600; color: var(--accent-dark);">
+          📑 Text Search Index
+        </summary>
+        <div id="textIndexContent" style="margin-top: 10px; font-family: var(--font-mono); white-space: pre-wrap;">db.movies.createIndex(
+  {
+    title: "text",
+    plot: "text",
+    fullplot: "text"
+  },
+  {
+    weights: {
+      title: 10,
+      plot: 3,
+      fullplot: 1
+    },
+    name: "MovieFullTextIndex",
+    default_language: "english"
+  }
+);</div>
+      </details>
 
       <div id="queryExplanation" class="code-box" style="display:none;"></div>
 
