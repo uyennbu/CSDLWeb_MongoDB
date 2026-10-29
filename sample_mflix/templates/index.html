@@ -27,7 +27,6 @@
     <button class="tab-btn active" onclick="switchTab('crud')">1. CRUD & Text Search</button>
     <button class="tab-btn" onclick="switchTab('aggregation')">2. Aggregation Pipeline</button>
     <button class="tab-btn" onclick="switchTab('replication')">3. Replication</button>
-    <button class="tab-btn" onclick="switchTab('sharding')">4. Sharding</button>
   </nav>
 
   <!-- TAB 1: CRUD -->
@@ -131,24 +130,10 @@
         </div>
       </div>
 
-      <!-- Live Sync Test Section -->
-      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-        <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-dark);">
-          Demo 1: Kiểm tra Đồng bộ Dữ liệu Tức thời (Write to Primary & Replicate to Secondaries)
-        </h4>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
-          Ghi 1 bản ghi mới vào node <strong>PRIMARY</strong>, sau đó hệ thống sẽ ngay lập tức kết nối trực tiếp đến
-          từng <strong>SECONDARY</strong> để kiểm tra bản ghi đã được sao chép sang hay chưa.
-        </p>
-        <button class="btn btn-primary btn-sm" onclick="triggerSyncTest()">Thực hiện kiểm tra đồng bộ (Sync
-          Test)</button>
-        <div id="syncTestResult" class="code-box" style="display: none; margin-top: 12px;"></div>
-      </div>
-
       <!-- Failover Simulation Section -->
       <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
         <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-dark);">
-          Demo 2: Thử nghiệm High Availability (Bầu chọn lại Primary khi Leader chết)
+          Demo: Thử nghiệm High Availability (Bầu chọn lại Primary khi Leader chết)
         </h4>
         <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
           1. Nhấn nút <strong>"Tắt Container (Dừng Node)"</strong> ở node đang là <code>PRIMARY</code> phía trên.<br>
@@ -157,98 +142,6 @@
           3. Nhấn <strong>"Bật lại Container"</strong>: Node cũ sẽ gia nhập lại cụm và tự động trở thành
           <code>SECONDARY</code>, bắt kịp oplog.
         </p>
-      </div>
-    </section>
-  </main>
-
-  <!-- TAB 4: SHARDING -->
-  <main id="shardingTab" class="tab-content">
-    <section class="card">
-      <div class="card-title">
-        <span>MongoDB Sharding Cluster</span>
-        <button class="btn btn-outline btn-sm" onclick="loadShardingStatus()">🔄 Cập nhật phân bổ Shard</button>
-      </div>
-
-      <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
-        <strong>Sharding (Phân mảnh):</strong> Chia nhỏ tập dữ liệu 21.349 phim ra 3 Shard độc lập dựa trên
-        <strong>Shard Key: <code>year</code></strong>.
-        Client chỉ làm việc với <strong>mongos router</strong>, mongos tra cứu metadata trên <strong>Config Server
-          (<code>cfgRS</code>)</strong> để chuyển tiếp truy vấn.
-      </p>
-
-      <!-- Architecture Flow Diagram Card -->
-      <div
-        style="background: var(--code-bg); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 14px; margin-bottom: 20px;">
-        <div style="font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; color: var(--accent-dark);">
-          Sơ đồ luồng truy vấn Sharded Cluster:
-        </div>
-        <div style="font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.6; color: #444;">
-          Client / Web App ──▶ <strong>mongos (Router)</strong> ──[Tra cứu Metadata]──▶ <strong>Config Server
-            (cfg1:27017)</strong><br>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├──
-          [year &lt; 1980]&nbsp;&nbsp;&nbsp;──▶ <strong>Shard 1</strong> (shard1RS)<br>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├──
-          [1980..2000)&nbsp;&nbsp;──▶ <strong>Shard 2</strong> (shard2RS)<br>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└──
-          [year &gt;= 2000]──▶ <strong>Shard 3</strong> (shard3RS)
-        </div>
-      </div>
-
-      <!-- 3 Shards Distribution Cards -->
-      <h4 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--accent-dark);">Phân bổ tài liệu trên từng Shard
-        (Shard Distribution):</h4>
-      <div class="movie-grid" id="shardsGrid">
-        <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 20px;">
-          Đang tính toán phân bổ trên các shard...
-        </div>
-      </div>
-
-      <!-- Demo Routing Query Section -->
-      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-        <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-dark);">
-          Demo 1: So sánh Định tuyến Targeted vs Scatter-Gather Query
-        </h4>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
-          Chọn một kiểu truy vấn để xem <code>mongos</code> định tuyến đến những Shard nào:
-        </p>
-
-        <div class="agg-tabs">
-          <button class="btn btn-outline" id="btnRouteSingle" onclick="testRoute('targeted_single')">
-            1. Truy vấn dựa trên shard key, chỉ truy cập đến 1 shard (Shard Key: year = 1995)
-          </button>
-          <button class="btn btn-outline" id="btnRouteRange" onclick="testRoute('targeted_range')">
-            2. Truy vấn dựa trên shard key, truy cập đến nhiều shard (Khoảng năm: 1975 - 1985)
-          </button>
-          <button class="btn btn-outline" id="btnRouteScatter" onclick="testRoute('scatter_gather')">
-            3. Truy vấn không dựa trên shard key
-          </button>
-        </div>
-
-        <div id="routingResultBox" class="code-box" style="display: none; margin-top: 10px;"></div>
-      </div>
-
-      <!-- Demo Routing Insert Section -->
-      <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-        <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-dark);">
-          Demo 2: Định tuyến tự động khi Ghi (Insert Routing by Shard Key)
-        </h4>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">
-          Nhập năm phát hành để xem router sẽ gửi bản ghi vào Shard nào:
-        </p>
-
-        <div class="form-row" style="align-items: flex-end;">
-          <div class="form-group" style="max-width: 250px;">
-            <label>Năm phát hành (Shard Key 'year'):</label>
-            <input type="number" id="testInsertYear" value="1972" placeholder="Ví dụ: 1960, 1994, 2024">
-          </div>
-          <div class="form-group" style="flex: 2;">
-            <label>Tên phim:</label>
-            <input type="text" id="testInsertTitle" value="The Godfather" placeholder="Nhập tên phim">
-          </div>
-          <button class="btn btn-primary" onclick="simulateInsertRoute()">Xem Shard tiếp nhận</button>
-        </div>
-
-        <div id="insertRouteResult" class="code-box" style="display: none;"></div>
       </div>
     </section>
   </main>
