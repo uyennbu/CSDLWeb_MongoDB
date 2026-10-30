@@ -1,32 +1,125 @@
 import os
 import re
 import json
+import socket
 from datetime import datetime
 from bson import ObjectId
 from flask import Flask, render_template, request, jsonify
 import pymongo
 from pymongo import MongoClient
 
+# Tự động ánh xạ hostname của các node Replica Set sang 127.0.0.1
+# Giúp PyMongo kết nối cụm Replica Set từ máy host (ngoài Docker)
+# mà không bắt buộc người dùng phải sửa file /etc/hosts bằng quyền sudo.
+_orig_getaddrinfo = socket.getaddrinfo
+def _custom_getaddrinfo(host, port, *args, **kwargs):
+    if host in ("mflix1", "mflix2", "mflix3"):
+        host = "127.0.0.1"
+    return _orig_getaddrinfo(host, port, *args, **kwargs)
+socket.getaddrinfo = _custom_getaddrinfo
+
 app = Flask(__name__)
 
-# Kết nối MongoDB Replica Set hoặc trực tiếp tới node Primary (port 27030)
-# Thử kết nối replica set, nếu không có hostname mapping sẽ fallback directConnection=true
+# Cấu hình 3 node trong cụm
+NODES_CONFIG = [
+    {"name": "mflix1", "port": 27030, "container": "mflix1"},
+    {"name": "mflix2", "port": 27031, "container": "mflix2"},
+    {"name": "mflix3", "port": 27032, "container": "mflix3"}
+]
+
+# Chuỗi kết nối Replica Set chứa cả 3 node và chỉ định readPreference=primaryPreferred
+# Khi Primary sập, PyMongo sẽ tự động đọc từ Secondary còn lại mà không làm gián đoạn web
 MONGO_URI = os.getenv(
     "MONGO_URI",
-    "mongodb://localhost:27030,localhost:27031,localhost:27032/sample_mflix?replicaSet=rsMflix&directConnection=true"
+    "mongodb://localhost:27030,localhost:27031,localhost:27032/sample_mflix?replicaSet=rsMflix&readPreference=primaryPreferred"
 )
 
-try:
-    client = MongoClient(
-        "mongodb://localhost:27030/sample_mflix?directConnection=true",
-        serverSelectionTimeoutMS=3000
-    )
-    db = client["sample_mflix"]
-    # Test connection
-    client.admin.command('ping')
-except Exception as e:
-    print(f"Lỗi kết nối MongoDB: {e}")
-    db = None
+client = None
+_cached_db = None
+
+def get_fallback_db():
+    """Fallback: Quét tìm trực tiếp (directConnection) một node bất kỳ còn sống trong cụm"""
+    for cfg in NODES_CONFIG:
+        try:
+            c = MongoClient(
+                f"mongodb://localhost:{cfg['port']}/?directConnection=true",
+                serverSelectionTimeoutMS=800,
+                connectTimeoutMS=800
+            )
+            c.admin.command('ping')
+            return c.get_database("sample_mflix", read_preference=pymongo.read_preferences.ReadPreference.SECONDARY_PREFERRED)
+        except Exception:
+            continue
+    return None
+
+def get_db():
+    """
+    Lấy kết nối database:
+    1. Ưu tiên Replica Set client (hỗ trợ tự động failover sang PRIMARY mới hoặc đọc từ SECONDARY).
+    2. Nếu Replica Set chưa sẵn sàng hoặc lỗi, fallback kết nối trực tiếp tới node còn sống.
+    """
+    global client, _cached_db
+    if client is None:
+        try:
+            client = MongoClient(
+                MONGO_URI,
+                serverSelectionTimeoutMS=2000,
+                connectTimeoutMS=2000,
+                retryWrites=True
+            )
+            _cached_db = client.get_database("sample_mflix", read_preference=pymongo.read_preferences.ReadPreference.PRIMARY_PREFERRED)
+        except Exception as e:
+            print(f"Không thể khởi tạo MongoClient Replica Set: {e}")
+            client = None
+            _cached_db = None
+
+    if _cached_db is not None:
+        return _cached_db
+
+    return get_fallback_db()
+
+class CollectionProxy:
+    """Proxy bọc từng collection, tự động chuyển hướng truy vấn sang node còn sống nếu kết nối gặp lỗi"""
+    def __init__(self, collection_name):
+        self._name = collection_name
+
+    def _get_coll(self):
+        target = get_db()
+        if target is None:
+            raise pymongo.errors.ConnectionFailure("Không thể kết nối tới bất kỳ node MongoDB nào trong cụm!")
+        return getattr(target, self._name)
+
+    def __getattr__(self, name):
+        attr = getattr(self._get_coll(), name)
+        if callable(attr):
+            def wrapper(*args, **kwargs):
+                try:
+                    return attr(*args, **kwargs)
+                except (pymongo.errors.AutoReconnect, pymongo.errors.ServerSelectionTimeoutError, pymongo.errors.ConnectionFailure):
+                    # Nếu node hiện tại sập hoặc đang bầu cử, tự động truy vấn sang node còn sống
+                    fallback = get_fallback_db()
+                    if fallback is not None:
+                        fb_attr = getattr(getattr(fallback, self._name), name)
+                        return fb_attr(*args, **kwargs)
+                    raise
+            return wrapper
+        return attr
+
+class DatabaseProxy:
+    """Proxy cho biến 'db' để toàn bộ app gọi db.movies, db.comments... luôn lấy kết nối còn sống"""
+    def __getattr__(self, name):
+        return CollectionProxy(name)
+
+    def __getitem__(self, name):
+        return CollectionProxy(name)
+
+    def __bool__(self):
+        try:
+            return get_db() is not None
+        except Exception:
+            return False
+
+db = DatabaseProxy()
 
 def serialize_doc(doc):
     """Chuyển đổi ObjectId và Datetime sang định dạng JSON serialize được"""
@@ -80,7 +173,7 @@ def index():
 @app.route("/api/status", methods=["GET"])
 def get_status():
     """Kiểm tra trạng thái cluster và đếm số lượng tài liệu"""
-    if db is None:
+    if get_db() is None:
         return jsonify({"status": "error", "message": "Không thể kết nối MongoDB"}), 500
     try:
         movie_count = db.movies.count_documents({})
@@ -415,12 +508,6 @@ def agg_custom():
 # ==========================================
 # 3. REPLICATION DEMO APIS
 # ==========================================
-
-NODES_CONFIG = [
-    {"name": "mflix1", "port": 27030, "container": "mflix1"},
-    {"name": "mflix2", "port": 27031, "container": "mflix2"},
-    {"name": "mflix3", "port": 27032, "container": "mflix3"}
-]
 
 @app.route("/api/replication/status", methods=["GET"])
 def get_replication_status():
