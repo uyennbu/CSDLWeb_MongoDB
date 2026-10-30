@@ -295,12 +295,12 @@ async function runAgg(type) {
         { key: "votes", label: "Lượt vote", format: v => v?.toLocaleString() },
         { key: "genres", label: "Thể loại", format: v => (v || []).join(", ") }
       ]);
-    // } else if (type === 3) {
+      // } else if (type === 3) {
       // renderTable(data.result, [
-        // { key: "title", label: "Tên phim" },
-        // { key: "year", label: "Năm" },
-        // { key: "commentCount", label: "Số bình luận (Lookup)", format: v => `💬 ${v}` },
-        // { key: "latestComment", label: "Bình luận trích dẫn mẫu", format: v => (v && v.length) ? `"${v[0]}"` : "—" }
+      // { key: "title", label: "Tên phim" },
+      // { key: "year", label: "Năm" },
+      // { key: "commentCount", label: "Số bình luận (Lookup)", format: v => `💬 ${v}` },
+      // { key: "latestComment", label: "Bình luận trích dẫn mẫu", format: v => (v && v.length) ? `"${v[0]}"` : "—" }
       // ]);
     }
   } catch (err) {
@@ -375,7 +375,7 @@ async function loadReplicationStatus() {
       let btnActionHtml = "";
 
       if (node.state === "PRIMARY") {
-        statusBadge = `<span class="badge" style="background:#eaf5ea; color:#1e6b22; font-weight:700; font-size:0.85rem;">👑 PRIMARY (Ghi & Đọc)</span>`;
+        statusBadge = `<span class="badge" style="background:#eaf5ea; color:#1e6b22; font-weight:700; font-size:0.85rem;">PRIMARY (Ghi & Đọc)</span>`;
         borderColor = "#9ac596";
         btnActionHtml = `
           <button class="btn btn-danger btn-sm" onclick="toggleNode('${node.container}', 'stop')">
@@ -383,7 +383,7 @@ async function loadReplicationStatus() {
           </button>
         `;
       } else if (node.state === "SECONDARY") {
-        statusBadge = `<span class="badge" style="background:#eef2f9; color:#224a86; font-weight:600; font-size:0.85rem;">🔄 SECONDARY (Sao chép)</span>`;
+        statusBadge = `<span class="badge" style="background:#eef2f9; color:#224a86; font-weight:600; font-size:0.85rem;">SECONDARY (Sao chép)</span>`;
         borderColor = "#b5c7e4";
         btnActionHtml = `
           <button class="btn btn-outline btn-sm" onclick="toggleNode('${node.container}', 'stop')">
