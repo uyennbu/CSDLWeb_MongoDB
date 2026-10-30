@@ -4,6 +4,8 @@ let currentGenres = [];
 document.addEventListener("DOMContentLoaded", () => {
   checkClusterStatus();
   loadMovies();
+  const modeSelect = document.getElementById("searchModeSelect");
+  toggleTextIndexInfo(modeSelect ? modeSelect.value : "text");
 });
 
 function switchTab(tabName) {
@@ -24,10 +26,6 @@ function switchTab(tabName) {
     document.querySelector("button[onclick=\"switchTab('replication')\"]").classList.add("active");
     document.getElementById("replicationTab").classList.add("active");
     loadReplicationStatus();
-  } else if (tabName === "sharding") {
-    document.querySelector("button[onclick=\"switchTab('sharding')\"]").classList.add("active");
-    document.getElementById("shardingTab").classList.add("active");
-    loadShardingStatus();
   }
 }
 
@@ -64,7 +62,15 @@ async function searchMovies() {
   const q = document.getElementById("searchInput").value;
   const genre = document.getElementById("genreSelect").value;
   const mode = document.getElementById("searchModeSelect") ? document.getElementById("searchModeSelect").value : "text";
+  toggleTextIndexInfo(mode);
   loadMovies(q, genre, mode);
+}
+
+// Hiển thị câu lệnh tạo Text Search Index (chỉ khi chọn chế độ Full-Text Search)
+function toggleTextIndexInfo(mode) {
+  const panel = document.getElementById("textIndexInfo");
+  if (!panel) return;
+  panel.style.display = mode === "text" ? "block" : "none";
 }
 
 async function loadMovies(q = "", genre = "", mode = "text") {
@@ -248,7 +254,7 @@ async function deleteMovie(id, title) {
 async function runAgg(type) {
   document.getElementById("btnAgg1").className = type === 1 ? "btn btn-primary" : "btn btn-outline";
   document.getElementById("btnAgg2").className = type === 2 ? "btn btn-primary" : "btn btn-outline";
-  document.getElementById("btnAgg3").className = type === 3 ? "btn btn-primary" : "btn btn-outline";
+  // document.getElementById("btnAgg3").className = type === 3 ? "btn btn-primary" : "btn btn-outline";
 
   const pipelineBox = document.getElementById("pipelineBox");
   const container = document.getElementById("aggResultTableContainer");
@@ -261,7 +267,7 @@ async function runAgg(type) {
     let url = "";
     if (type === 1) url = "/api/aggregate/genres-stats";
     else if (type === 2) url = "/api/aggregate/top-rated-by-year?min_year=2000";
-    else if (type === 3) url = "/api/aggregate/movies-comments-lookup";
+    // else if (type === 3) url = "/api/aggregate/movies-comments-lookup";
 
     const startTime = performance.now();
     const res = await fetch(url);
@@ -289,13 +295,13 @@ async function runAgg(type) {
         { key: "votes", label: "Lượt vote", format: v => v?.toLocaleString() },
         { key: "genres", label: "Thể loại", format: v => (v || []).join(", ") }
       ]);
-    } else if (type === 3) {
-      renderTable(data.result, [
-        { key: "title", label: "Tên phim" },
-        { key: "year", label: "Năm" },
-        { key: "commentCount", label: "Số bình luận (Lookup)", format: v => `💬 ${v}` },
-        { key: "latestComment", label: "Bình luận trích dẫn mẫu", format: v => (v && v.length) ? `"${v[0]}"` : "—" }
-      ]);
+    // } else if (type === 3) {
+      // renderTable(data.result, [
+        // { key: "title", label: "Tên phim" },
+        // { key: "year", label: "Năm" },
+        // { key: "commentCount", label: "Số bình luận (Lookup)", format: v => `💬 ${v}` },
+        // { key: "latestComment", label: "Bình luận trích dẫn mẫu", format: v => (v && v.length) ? `"${v[0]}"` : "—" }
+      // ]);
     }
   } catch (err) {
     pipelineBox.textContent = "// Lỗi khi thực thi Aggregation";
@@ -450,157 +456,5 @@ async function toggleNode(containerName, action) {
     }
   } catch (err) {
     alert("Lỗi mạng khi điều khiển container");
-  }
-}
-
-async function triggerSyncTest() {
-  const box = document.getElementById("syncTestResult");
-  box.style.display = "block";
-  box.textContent = "// Đang ghi 1 document vào Primary và kiểm tra nhân bản trên các node...";
-
-  try {
-    const res = await fetch("/api/replication/sync-test", { method: "POST" });
-    const data = await res.json();
-
-    if (res.ok) {
-      let lines = [
-        `✅ ${data.message}`,
-        `Document Title: "${data.test_title}"`,
-        `Inserted ID: ObjectId("${data.inserted_id}")`,
-        `\nKết quả kiểm tra đồng bộ từng Node:`
-      ];
-
-      (data.results || []).forEach(r => {
-        const icon = r.replicated ? "✅ ĐÃ ĐỒNG BỘ" : "❌ CHƯA CÓ / NODE DOWN";
-        lines.push(`  - [${r.node}:${r.port}] (${r.state}) -> ${icon}`);
-      });
-
-      box.textContent = lines.join("\n");
-      showToast("Đã hoàn tất kiểm tra đồng bộ replication!");
-      loadReplicationStatus();
-    } else {
-      box.textContent = `❌ Lỗi: ${data.error || "Không thể kiểm tra đồng bộ"}`;
-    }
-  } catch (err) {
-    box.textContent = `❌ Lỗi mạng: ${err.message}`;
-  }
-}
-
-// 7. SHARDING DEMO LOGIC
-async function loadShardingStatus() {
-  const container = document.getElementById("shardsGrid");
-  container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 20px;">Đang tính toán phân bổ dữ liệu trên 3 Shard...</div>`;
-
-  try {
-    const res = await fetch("/api/sharding/status");
-    const data = await res.json();
-    container.innerHTML = "";
-
-    (data.shards || []).forEach((shard, idx) => {
-      const card = document.createElement("div");
-      card.className = "movie-card";
-
-      // Màu sắc theo từng shard
-      const colors = ["#b5c7e4", "#d5ccbe", "#9ac596"];
-      card.style.borderColor = colors[idx % colors.length];
-
-      card.innerHTML = `
-        <div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <h3 style="font-size:1.05rem; font-weight:700;">${shard.name}</h3>
-            <span class="badge" style="background:#efece6; font-weight:600;">${shard.percentage}% dữ liệu</span>
-          </div>
-
-          <div style="font-size:0.85rem; color:var(--text-muted); line-height:1.7; margin-bottom:12px;">
-            <div><strong>Host:</strong> <code>${shard.host}</code></div>
-            <div><strong>Khoảng Shard Key:</strong> <code>${shard.keyRange}</code></div>
-            <div style="margin-top:4px;"><strong>Mô tả:</strong> ${shard.description}</div>
-            <div style="margin-top:6px; font-size:0.95rem;">
-              <strong>Số documents:</strong> <strong style="color:var(--accent-dark);">${shard.documentCount.toLocaleString()}</strong> phim
-            </div>
-          </div>
-        </div>
-
-        <!-- Thanh tỷ lệ phân bổ -->
-        <div style="background:#e5e2db; height:8px; border-radius:4px; overflow:hidden; margin-top:auto;">
-          <div style="background:var(--accent-dark); width:${shard.percentage}%; height:100%;"></div>
-        </div>
-      `;
-
-      container.appendChild(card);
-    });
-
-  } catch (err) {
-    container.innerHTML = `<div style="grid-column: 1/-1; color: var(--danger-text); padding: 20px;">Lỗi tải phân bổ Shard: ${err.message}</div>`;
-  }
-}
-
-async function testRoute(queryType) {
-  document.getElementById("btnRouteSingle").className = queryType === "targeted_single" ? "btn btn-primary" : "btn btn-outline";
-  document.getElementById("btnRouteRange").className = queryType === "targeted_range" ? "btn btn-primary" : "btn btn-outline";
-  document.getElementById("btnRouteScatter").className = queryType === "scatter_gather" ? "btn btn-primary" : "btn btn-outline";
-
-  const box = document.getElementById("routingResultBox");
-  box.style.display = "block";
-  box.textContent = "// Đang phân tích định tuyến qua mongos router...";
-
-  try {
-    const res = await fetch("/api/sharding/route-explain", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query_type: queryType })
-    });
-    const data = await res.json();
-
-    if (res.ok) {
-      const output = [
-        `Kiểu truy vấn: ${data.queryType}`,
-        `Cú pháp truy vấn mẫu: db.movies.find(${JSON.stringify(data.sampleQuery)})`,
-        `\nMongos Router:`,
-        `  - Routing: ${data.routingStage}`,
-        `  - Shard(s) được gửi truy vấn tới: [ ${data.targetedShards.join(", ")} ]`,
-        `  - Đánh giá hiệu năng: ${data.performance}`,
-        `\nGiải thích:\n${data.explanation}`
-      ];
-      box.textContent = output.join("\n");
-    } else {
-      box.textContent = "Lỗi: " + data.error;
-    }
-  } catch (err) {
-    box.textContent = "Lỗi mạng: " + err.message;
-  }
-}
-
-async function simulateInsertRoute() {
-  const yearInput = document.getElementById("testInsertYear").value;
-  const titleInput = document.getElementById("testInsertTitle").value.trim();
-  const year = parseInt(yearInput) || 2026;
-
-  const box = document.getElementById("insertRouteResult");
-  box.style.display = "block";
-  box.textContent = "// Đang tính toán Shard tiếp nhận bản ghi...";
-
-  try {
-    const res = await fetch("/api/sharding/insert-route", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ year, title: titleInput || "Sample Movie" })
-    });
-    const data = await res.json();
-
-    if (res.ok) {
-      const output = [
-        `${data.message}`,
-        `Shard Key giá trị: ${JSON.stringify(data.shardKey)}`,
-        `Shard được phân bổ lưu trữ: ${data.assignedShard}`,
-        `Nguyên tắc phân vùng: ${data.rule}`
-      ];
-      box.textContent = output.join("\n");
-      showToast(`Bản ghi được gán về ${data.assignedShard}`);
-    } else {
-      box.textContent = "Lỗi: " + data.error;
-    }
-  } catch (err) {
-    box.textContent = "Lỗi mạng: " + err.message;
   }
 }

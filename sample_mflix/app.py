@@ -1,4 +1,6 @@
 import os
+import re
+import json
 from datetime import datetime
 from bson import ObjectId
 from flask import Flask, render_template, request, jsonify
@@ -50,6 +52,26 @@ def serialize_doc(doc):
                 new_doc[k] = v
         return new_doc
     return doc
+
+def to_shell(value):
+    """Chuyển dict/list Python sang cú pháp mongosh dễ đọc, ví dụ: { $text: { $search: "abc" } }"""
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        parts = []
+        for k, v in value.items():
+            key = k if re.fullmatch(r"[A-Za-z_$][\w$]*", k) else json.dumps(k)
+            parts.append(f"{key}: {to_shell(v)}")
+        return "{ " + ", ".join(parts) + " }"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(to_shell(v) for v in value) + "]"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "null"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
 
 @app.route("/")
 def index():
@@ -127,11 +149,17 @@ def list_movies():
         genres = db.movies.distinct("genres")
         clean_genres = sorted([g for g in genres if g and isinstance(g, str)])[:25]
 
-        # Mô tả câu lệnh MongoDB
-        if mode == "text" and q:
-            mongo_code = f"db.movies.find(\n  {{ $text: {{ $search: \"{q}\" }} }},\n  {{ title: 1, year: 1, score: {{ $meta: 'textScore' }} }}\n).sort({{ score: {{ $meta: 'textScore' }} }}).limit({limit})"
-        else:
-            mongo_code = f"db.movies.find({filter_query}, {{ title: 1, year: 1, genres: 1 }}).sort({{ year: -1 }}).limit({limit})"
+        # Mô tả câu lệnh MongoDB (sinh trực tiếp từ filter/projection/sort thật đã dùng ở trên)
+        sort_doc = {field: direction for field, direction in sort_criteria}
+        mongo_code = (
+            f"db.movies.find(\n"
+            f"  {to_shell(filter_query)},\n"
+            f"  {to_shell(projection)}\n"
+            f").sort({to_shell(sort_doc)})"
+            + (f".skip({skip})" if skip else "")
+            + f".limit({limit})"
+            + f"\n\n// Đếm tổng số kết quả:\ndb.movies.countDocuments({to_shell(filter_query)})"
+        )
 
         return jsonify({
             "total": total,
@@ -260,7 +288,13 @@ def agg_genres_stats():
                     "_id": "$genres",
                     "totalMovies": {"$sum": 1},
                     "avgRating": {"$avg": "$imdb.rating"},
-                    "maxRating": {"$max": "$imdb.rating"}
+                    # Một số phim có imdb.rating = "" (chuỗi rỗng). Theo thứ tự so sánh BSON,
+                    # string > number nên $max sẽ trả về "" -> chỉ lấy giá trị kiểu số.
+                    "maxRating": {
+                        "$max": {
+                            "$cond": [{"$isNumber": "$imdb.rating"}, "$imdb.rating", None]
+                        }
+                    }
                 }
             },
             {"$match": {"totalMovies": {"$gte": 50}}},
@@ -320,45 +354,45 @@ def agg_top_rated_by_year():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/aggregate/movies-comments-lookup", methods=["GET"])
-def agg_movies_lookup():
-    """
-    Aggregation 3: $lookup (JOIN) nối bảng movies với comments
-    Lấy danh sách các phim có nhiều bình luận nhất
-    """
-    try:
-        pipeline = [
-            {
-                "$lookup": {
-                    "from": "comments",
-                    "localField": "_id",
-                    "foreignField": "movie_id",
-                    "as": "movie_comments"
-                }
-            },
-            {
-                "$project": {
-                    "title": 1,
-                    "year": 1,
-                    "genres": 1,
-                    "commentCount": {"$size": "$movie_comments"},
-                    "latestComment": {
-                        "$slice": ["$movie_comments.text", 2]
-                    }
-                }
-            },
-            {"$sort": {"commentCount": -1}},
-            {"$limit": 8}
-        ]
+# @app.route("/api/aggregate/movies-comments-lookup", methods=["GET"])
+# def agg_movies_lookup():
+    # """
+    # Aggregation 3: $lookup (JOIN) nối bảng movies với comments
+    # Lấy danh sách các phim có nhiều bình luận nhất
+    # """
+    # try:
+        # pipeline = [
+            # {
+                # "$lookup": {
+                    # "from": "comments",
+                    # "localField": "_id",
+                    # "foreignField": "movie_id",
+                    # "as": "movie_comments"
+                # }
+            # },
+            # {
+                # "$project": {
+                    # "title": 1,
+                    # "year": 1,
+                    # "genres": 1,
+                    # "commentCount": {"$size": "$movie_comments"},
+                    # "latestComment": {
+                        # "$slice": ["$movie_comments.text", 2]
+                    # }
+                # }
+            # },
+            # {"$sort": {"commentCount": -1}},
+            # {"$limit": 8}
+        # ]
 
-        result = list(db.movies.aggregate(pipeline))
-        return jsonify({
-            "title": "Lookup (JOIN): Phim có nhiều bình luận nhất từ collection 'comments'",
-            "pipeline": pipeline,
-            "result": serialize_doc(result)
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # result = list(db.movies.aggregate(pipeline))
+        # return jsonify({
+            # "title": "Lookup (JOIN): Phim có nhiều bình luận nhất từ collection 'comments'",
+            # "pipeline": pipeline,
+            # "result": serialize_doc(result)
+        # })
+    # except Exception as e:
+        # return jsonify({"error": str(e)}), 500
 
 @app.route("/api/aggregate/custom", methods=["POST"])
 def agg_custom():
@@ -474,192 +508,6 @@ def toggle_node():
         })
     except Exception as e:
         return jsonify({"error": f"Lỗi khi thực thi docker: {str(e)}"}), 500
-
-@app.route("/api/replication/sync-test", methods=["POST"])
-def replication_sync_test():
-    """Ghi 1 document vào Primary và kiểm tra xem cả 3 node đã đồng bộ (Replicated) chưa"""
-    try:
-        test_title = f"Replication Test Record - {datetime.utcnow().strftime('%H:%M:%S')}"
-        doc = {
-            "title": test_title,
-            "year": 2026,
-            "genres": ["Test", "Replication"],
-            "plot": "Document dùng để kiểm tra tính năng đồng bộ dữ liệu tự động giữa Primary và Secondary.",
-            "isReplicationTest": True,
-            "createdAt": datetime.utcnow()
-        }
-
-        # Ghi vào Primary qua kết nối thông thường
-        insert_res = db.movies.insert_one(doc)
-        inserted_id = str(insert_res.inserted_id)
-
-        # Kiểm tra sự tồn tại trên từng node
-        import time
-        time.sleep(0.3)  # Đợi replication lag nhỏ
-
-        check_results = []
-        for cfg in NODES_CONFIG:
-            found = False
-            state = "DOWN"
-            try:
-                c = MongoClient(f"mongodb://localhost:{cfg['port']}/?directConnection=true", serverSelectionTimeoutMS=800)
-                db_node = c.get_database("sample_mflix", read_preference=pymongo.read_preferences.ReadPreference.SECONDARY_PREFERRED)
-                res = db_node.movies.find_one({"_id": ObjectId(inserted_id)})
-                if res:
-                    found = True
-                is_master = c.admin.command("isMaster")
-                state = "PRIMARY" if is_master.get("ismaster") else ("SECONDARY" if is_master.get("secondary") else "OTHER")
-            except Exception:
-                found = False
-                state = "DOWN"
-
-            check_results.append({
-                "node": cfg["name"],
-                "port": cfg["port"],
-                "state": state,
-                "replicated": found
-            })
-
-        return jsonify({
-            "message": "Đã ghi dữ liệu vào PRIMARY và kiểm tra đồng bộ sang các SECONDARY!",
-            "test_title": test_title,
-            "inserted_id": inserted_id,
-            "results": check_results
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ==========================================
-# 4. SHARDING DEMO APIS
-# ==========================================
-
-# Mô hình Sharding 3 Shard (dựa trên Shard Key 'year' cho movies hoặc khoảng giá 'price')
-SHARD_RANGES = [
-    {
-        "id": "shard1RS",
-        "name": "Shard 1",
-        "host": "shard1:27017",
-        "keyRange": "year < 1980",
-        "description": "Lưu trữ các bộ phim phát hành trước năm 1980",
-        "filter": {"year": {"$lt": 1980}}
-    },
-    {
-        "id": "shard2RS",
-        "name": "Shard 2",
-        "host": "shard2:27017",
-        "keyRange": "1980 <= year < 2000",
-        "description": "Lưu trữ các bộ phim từ năm 1980 đến 1999",
-        "filter": {"year": {"$gte": 1980, "$lt": 2000}}
-    },
-    {
-        "id": "shard3RS",
-        "name": "Shard 3",
-        "host": "shard3:27017",
-        "keyRange": "year >= 2000",
-        "description": "Lưu trữ các bộ phim từ năm 2000 trở đi",
-        "filter": {"year": {"$gte": 2000}}
-    }
-]
-
-@app.route("/api/sharding/status", methods=["GET"])
-def get_sharding_status():
-    """Thống kê phân bổ dữ liệu Sharding theo Shard Key"""
-    try:
-        shards_info = []
-        total_movies = db.movies.count_documents({})
-
-        for s in SHARD_RANGES:
-            count = db.movies.count_documents(s["filter"])
-            pct = round((count / total_movies * 100), 1) if total_movies > 0 else 0
-            shards_info.append({
-                "id": s["id"],
-                "name": s["name"],
-                "host": s["host"],
-                "keyRange": s["keyRange"],
-                "description": s["description"],
-                "documentCount": count,
-                "percentage": pct
-            })
-
-        return jsonify({
-            "shardKey": "year (Range-based Sharding)",
-            "mongosRouter": "mongos:27017 (Client Gateway)",
-            "configServer": "cfgRS/cfg1:27017 (Metadata & Chunk Catalog)",
-            "totalDocuments": total_movies,
-            "shards": shards_info
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/sharding/route-explain", methods=["POST"])
-def explain_sharding_route():
-    """
-    Minh họa cách Router (mongos) định tuyến truy vấn:
-    - Targeted Query (Đơn Shard): Nếu có Shard Key ('year') -> Chỉ gửi đúng 1 Shard liên quan (cực nhanh).
-    - Multi-Shard Query: Nếu Shard Key trải qua 2 khoảng.
-    - Scatter-Gather Query: Nếu KHÔNG có Shard Key -> Phải phát tán tới TẤT CẢ các Shard rồi gộp kết quả.
-    """
-    try:
-        data = request.json or {}
-        query_type = data.get("query_type", "targeted")  # 'targeted_single', 'targeted_range', 'scatter_gather'
-
-        if query_type == "targeted_single":
-            # Ví dụ: find({ year: 1995, title: /Toy Story/ })
-            year_val = int(data.get("year", 1995))
-            target_shard = "shard1RS" if year_val < 1980 else ("shard2RS" if year_val < 2000 else "shard3RS")
-            sample_query = {"year": year_val}
-            return jsonify({
-                "queryType": "Truy cập 1 shard",
-                "explanation": f"Truy vấn dựa trên shard key 'year = {year_val}'. Mongos tra cứu Config Server và gửi thẳng truy vấn tới duy nhất 1 Shard.",
-                "routingStage": "SINGLE_SHARD",
-                "targetedShards": [target_shard],
-                "sampleQuery": sample_query,
-                "performance": "Nhanh nhất (Tối ưu hóa tài nguyên mạng và CPU)"
-            })
-
-        elif query_type == "targeted_range":
-            # Ví dụ: find({ year: { $gte: 1975, $lte: 1985 } })
-            sample_query = {"year": {"$gte": 1975, "$lte": 1985}}
-            return jsonify({
-                "queryType": "Truy vấn đến nhiều shard",
-                "explanation": "Truy vấn tìm theo khoảng năm (1975 - 1985), yêu cầu phải truy cập đến cả Shard 1 (<1980) và Shard 2 (1980-1999). Mongos gửi yêu cầu đến 2 Shard này và gộp kết quả.",
-                "routingStage": "SHARD_MERGE (2 Shards)",
-                "targetedShards": ["shard1RS", "shard2RS"],
-                "sampleQuery": sample_query,
-                "performance": "Nhanh (Chỉ truy cập đúng các Shard chứa dữ liệu)"
-            })
-
-        else:
-            # Ví dụ: find({ genres: "Action" }) -> Không có shard key!
-            sample_query = {"genres": "Action"}
-            return jsonify({
-                "queryType": "Truy vấn toàn bộ",
-                "explanation": "Truy vấn không chứa Shard Key (tìm theo 'genres'). Mongos không biết phim nằm ở đâu nên phải gửi truy vấn tới tất cả các Shard, sau đó gom kết quả về sắp xếp.",
-                "routingStage": "SHARD_MERGE (Broadcast all Shards)",
-                "targetedShards": ["shard1RS", "shard2RS", "shard3RS"],
-                "sampleQuery": sample_query,
-                "performance": "Chậm và tốn tài nguyên (Cần tránh trong các hệ thống lớn)"
-            })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/sharding/insert-route", methods=["POST"])
-def simulate_sharding_insert():
-    """Minh họa router tự động định tuyến khi thêm mới document dựa vào Shard Key"""
-    try:
-        data = request.json or {}
-        year = int(data.get("year", 2026))
-        title = data.get("title", "Sample Movie")
-
-        target_shard = "shard1RS" if year < 1980 else ("shard2RS" if year < 2000 else "shard3RS")
-        return jsonify({
-            "message": f"Dựa vào Shard Key year={year}, Mongos tự động định tuyến bản ghi '{title}' vào đúng shard: {target_shard}",
-            "shardKey": {"year": year},
-            "assignedShard": target_shard,
-            "rule": "Range-based partitioning: [Min..1980) -> Shard1 | [1980..2000) -> Shard2 | [2000..Max] -> Shard3"
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
