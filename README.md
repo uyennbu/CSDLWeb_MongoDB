@@ -68,3 +68,14 @@ CSDLWeb_MongoDB/
    python3 app.py
    ```
 3. Mở trình duyệt tại `http://localhost:5000` để trải nghiệm trực quan CRUD, Text Search, Aggregation và thử nghiệm tắt/bật node để kiểm tra High Availability.
+
+---
+
+## 4. Lưu Ý / Giới Hạn Kiến Trúc (Limitations)
+
+> [!NOTE]
+> **Vì sao Web Demo (`sample_mflix`) không tích hợp cụm Sharding vật lý?**
+> - Một hệ thống Sharded Cluster hoàn chỉnh trong thực tế đòi hỏi tối thiểu **5–10 container chạy đồng thời** (1–3 Config Server, 1 router `mongos`, và ít nhất 2–3 Shards – trong đó mỗi Shard chuẩn lại là một Replica Set 3 node).
+> - Việc chạy cùng lúc số lượng lớn tiến trình `mongod` trên máy tính cá nhân sẽ gây tiêu tốn nhiều RAM/CPU và dễ dẫn đến quá tải tài nguyên.
+> - Do đó, **`sample_mflix` chỉ tập trung kết nối vào cụm Replica Set 3 node (`rsMflix`)** để minh họa trực quan tính năng High Availability và các nghiệp vụ CRUD/Aggregation.
+
