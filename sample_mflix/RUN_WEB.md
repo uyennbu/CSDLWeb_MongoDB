@@ -1,126 +1,150 @@
-# Hướng Dẫn Chạy Web UI Demo MongoDB (Sample Mflix)
+# Hướng Dẫn Thiết Lập & Khởi Chạy Web Demo MongoDB (Sample Mflix)
 
-Web UI demo các truy vấn cơ bản **CRUD** và **Aggregation Pipeline** trên cơ sở dữ liệu `sample_mflix` (MongoDB Replica Set 3 node).
-
-Giao diện thiết kế theo phong cách tối giản, tinh tế với bảng màu **White - Beige - Light Gray**.
+Tài liệu này hợp nhất toàn bộ quy trình từ **chuẩn bị dữ liệu**, **thiết lập cụm MongoDB Replica Set 3 node** đến **cài đặt và vận hành ứng dụng Web UI**.
 
 ---
 
-## 1. Cài đặt thư viện cần thiết
+## 1. Tải Dữ Liệu Mẫu `sampledata.archive` Bằng `curl`
 
-Các thư viện đã được liệt kê trong [requirements.txt](file:///home/uyenuyen/CSDLWeb_MongoDB/sample_mflix/requirements.txt):
+Nếu thư mục chưa có sẵn file `sampledata.archive`, bạn có thể tải trực tiếp bộ dữ liệu mẫu chính thức của MongoDB Atlas (dung lượng ~380MB) bằng `curl`:
 
 ```bash
 cd sample_mflix
+curl  https://atlas-education.s3.amazonaws.com/sampledata.archive -o sampledata.archive
+```
+
+> [!NOTE]
+> File archive này chứa nhiều cơ sở dữ liệu mẫu của Atlas (`sample_mflix`, `sample_airbnb`, `sample_analytics`...). Ở bước nạp dữ liệu bên dưới, tham số `--nsInclude='sample_mflix.*'` sẽ lọc và chỉ import riêng database `sample_mflix`.
+
+---
+
+## 2. Khởi Động Cụm MongoDB Replica Set 3 Node
+
+Cụm gồm 3 node chạy trên Docker:
+
+| Node | Container | Port Host/Container | Vai trò mong muốn |
+|---|---|---|---|
+| mflix1 | `mflix1` | `27030` | PRIMARY (priority 2) |
+| mflix2 | `mflix2` | `27031` | SECONDARY |
+| mflix3 | `mflix3` | `27032` | SECONDARY |
+
+> Dùng dải cổng `27030–27032` để không bị xung đột với các cụm MongoDB khác (`27017–27019`). Mọi thao tác quản trị được thực hiện qua `docker exec` mà không cần cài đặt thêm công cụ MongoDB trên máy host.
+
+### Bước 2.1 – Khởi động 3 container
+```bash
+docker compose up -d
+docker compose ps
+```
+Đảm bảo cả 3 container `mflix1`, `mflix2`, `mflix3` đều ở trạng thái `Up`.
+
+### Bước 2.2 – Khởi tạo Replica Set (chỉ chạy 1 lần)
+```bash
+docker exec mflix1 mongosh --port 27030 --eval '
+rs.initiate({
+  _id: "rsMflix",
+  members: [
+    { _id: 0, host: "mflix1:27030", priority: 2 },
+    { _id: 1, host: "mflix2:27031" },
+    { _id: 2, host: "mflix3:27032" }
+  ]
+})'
+```
+*Đợi khoảng 5–10 giây để cụm hoàn tất bầu chọn PRIMARY.*
+
+### Bước 2.3 – Kiểm tra trạng thái Replica Set
+```bash
+docker exec mflix1 mongosh --port 27030 --quiet --eval '
+rs.status().members.forEach(m => print(m.name, "->", m.stateStr))'
+```
+Kết quả mong đợi:
+```text
+mflix1:27030 -> PRIMARY
+mflix2:27031 -> SECONDARY
+mflix3:27032 -> SECONDARY
+```
+
+### Bước 2.4 – Nạp dữ liệu vào Primary
+File `sampledata.archive` đã được mount tự động vào container `mflix1` tại `/data/import/sampledata.archive`:
+
+```bash
+docker exec mflix1 mongorestore --port 27030 \
+  --archive=/data/import/sampledata.archive \
+  --nsInclude='sample_mflix.*'
+```
+*(Lưu ý: Không thêm cờ `--gzip` vì file archive gốc không nén).*
+
+### Bước 2.5 – Kiểm tra dữ liệu đồng bộ
+- Kiểm tra số lượng document trên `mflix1` (PRIMARY):
+  ```bash
+  docker exec mflix1 mongosh --port 27030 --quiet --eval '
+  db = db.getSiblingDB("sample_mflix");
+  db.getCollectionNames().forEach(c => print(c, db[c].countDocuments()))'
+  ```
+- Kiểm tra dữ liệu đã tự động replicate sang `mflix2` (SECONDARY):
+  ```bash
+  docker exec mflix2 mongosh --port 27031 --quiet --eval '
+  db.getMongo().setReadPref("secondary");
+  print("movies count on secondary:", db.getSiblingDB("sample_mflix").movies.countDocuments())'
+  ```
+
+---
+
+## 3. Cài Đặt & Khởi Chạy Ứng Dụng Web UI
+
+### Bước 3.1 – Cài đặt thư viện Python
+Yêu cầu Python 3.9+. Cài đặt các phụ thuộc trong [requirements.txt](file:///home/uyenuyen/CSDLWeb_MongoDB/sample_mflix/requirements.txt):
+
+```bash
 pip install -r requirements.txt
 ```
 
-> **Danh sách gói cài đặt:**
-> - `Flask>=3.0.0`: Web framework nhẹ nhàng, dễ triển khai.
-> - `pymongo>=4.6.0`: MongoDB Driver chính thức cho Python.
-> - `python-dotenv>=1.0.0`: Quản lý biến môi trường.
-
----
-
-## 2. Khởi động MongoDB Cluster
-
-Nếu cluster chưa chạy, khởi động bằng Docker Compose:
-
-```bash
-docker compose up -d
-```
-
-Kiểm tra 3 container đang chạy bình thường (`mflix1`, `mflix2`, `mflix3`):
-```bash
-docker compose ps
-```
-
----
-
-## 3. Khởi chạy Web Server
-
-Chạy ứng dụng Flask:
-
+### Bước 3.2 – Chạy ứng dụng Flask
 ```bash
 python3 app.py
 ```
 
-Truy cập vào trình duyệt web tại địa chỉ:
-👉 **http://localhost:5000** hoặc **http://127.0.0.1:5000**
+Mở trình duyệt truy cập:
+👉 **http://localhost:5000** (hoặc `http://127.0.0.1:5000`)
+
+> [!TIP]
+> **Khả năng tự động chịu lỗi (High Availability):**
+> Trong mã nguồn [app.py](file:///home/uyenuyen/CSDLWeb_MongoDB/sample_mflix/app.py), hệ thống đã tích hợp sẵn cơ chế phân giải hostname Docker tự động và Dynamic Proxy kết nối đa tầng. Bạn có thể sử dụng web mà không cần cấu hình file `/etc/hosts`.
 
 ---
 
-## 4. Các tính năng chính trên Web UI
+## 4. Hướng Dẫn Sử Dụng Các Tính Năng Trên Web UI
 
-### A. Tab 1: CRUD Phim & Text Search (Collection `movies`)
-1. **Read & Full-Text Search:**
-   - **Chế độ 1: 🔍 MongoDB Full-Text Search (`$text`)**: 
-     - Tận dụng Text Index có sẵn (`cast`, `fullplot`, `genres`, `title`).
-     - Tự động tính điểm liên quan và sắp xếp theo **`textScore`** (`score: { $meta: "textScore" }`).
-     - Có thể thử từ khóa: `"space war"`, `"detective murder"`, `"godfather mafia"`.
-     - Câu lệnh MongoDB:
-       ```javascript
-       db.movies.find(
-         { $text: { $search: "space war" } },
-         { title: 1, year: 1, score: { $meta: "textScore" } }
-       ).sort({ score: { $meta: "textScore" } }).limit(12)
-       ```
-   - **Chế độ 2: 🔤 Regex thông thường**:
-     - Tìm kiếm chuỗi con không phân biệt hoa thường theo tiêu đề (`title: { $regex: ..., $options: "i" }`).
-   - Tự động hiển thị câu lệnh MongoDB tương ứng trực tiếp trên giao diện.
-2. **Create (Thêm mới):**
-   - Bấm nút **"+ Thêm phim mới (Create)"** ở góc trên.
-   - Nhập tên phim, năm, điểm IMDb, thể loại và tóm tắt.
-   - Thực thi lệnh: `db.movies.insertOne({ ... })`.
-3. **Update (Chỉnh sửa):**
-   - Bấm **"Sửa (Update)"** ở thẻ phim bất kỳ.
-   - Chỉnh sửa thông tin và lưu lại.
-   - Thực thi lệnh: `db.movies.updateOne({ _id: ... }, { $set: { ... } })`.
-4. **Delete (Xoá):**
-   - Bấm **"Xóa (Delete)"** trên thẻ phim (có hộp thoại xác nhận).
-   - Thực thi lệnh: `db.movies.deleteOne({ _id: ... })`.
+Giao diện Single Page Application (SPA) được thiết kế tối giản theo phong cách **Beige - White - Light Gray** với 3 tab:
+
+### Tab 1: CRUD & Text Search (Collection `movies`)
+- **Full-Text Search (`$text`):** Tận dụng Text Index `MovieFullTextIndex` (`title` trọng số 10, `plot` trọng số 3, `fullplot` trọng số 1). Hệ thống tự động tính điểm liên quan và sắp xếp theo **`textScore`**. Có thể thử các từ khóa: `space war`, `detective`, `godfather`.
+- **Regex Search:** Tìm kiếm chuỗi con không phân biệt hoa thường theo tiêu đề phim.
+- **Khung Code Tương Ứng:** Hiển thị trực tiếp câu lệnh mongosh thực thi tương ứng với bộ lọc đang chọn.
+- **Create / Update / Delete:** Bấm nút **"+ Thêm phim mới"**, **"Sửa"**, hoặc **"Xóa"** trực tiếp trên từng thẻ phim.
+
+### Tab 2: Aggregation Pipeline (Phân Tích Dữ Liệu)
+- **Pipeline 1 (`$unwind` + `$group`):** Thống kê số lượng phim và điểm IMDb trung bình/cao nhất theo từng thể loại phim.
+- **Pipeline 2 (`$match` + `$sort` + `$group`):** Tìm bộ phim có điểm IMDb cao nhất theo từng năm phát hành.
+- Xem trực tiếp pipeline JSON và thời gian thực thi của từng truy vấn.
+
+### Tab 3: Replication Demo & Thử Nghiệm High Availability
+- **Giám sát trực quan 3 Node:** Hiển thị thời gian thực vai trò 👑 **PRIMARY**, 🔄 **SECONDARY**, hoặc ❌ **DOWN**, độ trễ ping và số lượng document đã đồng bộ trên từng container.
+- **Thử nghiệm Bầu chọn Primary khi có sự cố (Automatic Failover):**
+  1. Nhấn nút màu đỏ **"Tắt Container (Dừng Node)"** tại node đang là `PRIMARY`.
+  2. Quan sát trong 5–10 giây: 2 node Secondary còn lại tự động tổ chức bầu cử chọn ra một `PRIMARY` mới. Web vẫn truy vấn đọc bình thường mà không bị sập.
+  3. Nhấn **"Bật lại Container"**: Node cũ tái gia nhập cụm với vai trò `SECONDARY`, tự động bắt kịp Oplog và giành lại quyền `PRIMARY` nhờ `priority: 2`.
 
 ---
 
-### B. Tab 2: Aggregation Pipeline (Phân tích dữ liệu)
-Cung cấp 3 kịch bản minh họa pipeline thực tế kèm câu lệnh code mẫu:
+## 5. Lệnh Quản Trị Hữu Ích
 
-1. **Pipeline 1: `$unwind` + `$group`**
-   - Bóc tách mảng `genres` và gom nhóm tính tổng số phim cùng điểm IMDb trung bình của từng thể loại.
-2. **Pipeline 2: `$match` + `$sort` + `$group`**
-   - Tìm bộ phim có điểm IMDb cao nhất trong mỗi năm (lấy `$first` sau khi sắp xếp).
-3. **Pipeline 3: `$lookup` (JOIN Collections)**
-   - Nối bảng `movies` với `comments` theo `movie_id` để thống kê các phim có nhiều bình luận tương tác nhất.
+```bash
+# Dừng cụm (giữ nguyên dữ liệu)
+docker compose stop
 
----
+# Khởi động lại cụm
+docker compose start
 
-### C. Tab 3: Replica Set & High Availability (Replication Demo)
-Trang chuyên biệt để trực quan hóa cụm 3 node MongoDB (`rsMflix`):
-
-1. **Giám sát trực tiếp trạng thái 3 Node:**
-   - Hiển thị vai trò hiện tại của từng container: 👑 **PRIMARY**, 🔄 **SECONDARY**, hoặc ❌ **DOWN**.
-   - Xem độ trễ ping (`ms`), cổng kết nối và số lượng documents đồng bộ trên từng node.
-2. **Demo Đồng bộ dữ liệu (Replication Sync Test):**
-   - Bấm nút **"Thực hiện kiểm tra đồng bộ (Sync Test)"**: Hệ thống ghi một bản ghi mới vào Primary rồi ngay lập tức đọc trực tiếp từ từng Secondary để kiểm chứng dữ liệu đã được nhân bản sang tất cả các node.
-3. **Demo Tự phục hồi & Bầu cử lại (Automatic Failover):**
-   - Bấm **"🛑 Tắt Container (Giả lập chết)"** ngay tại node Primary.
-   - Quan sát 2 node Secondary còn lại tự động tổ chức bầu cử chọn ra một **PRIMARY mới** mà không làm gián đoạn cụm.
-   - Bấm **"▶️ Bật lại Container"**: Node bị tắt sẽ khởi động lại và tự gia nhập cụm với vai trò Secondary, đồng bộ lại oplog từ Primary mới.
-
----
-
-### D. Tab 4: Sharding & Scale-Out (Phân mảnh ngang dữ liệu)
-Trang trực quan hóa toàn diện kiến trúc **Sharded Cluster**:
-
-1. **Sơ đồ cấu trúc 3 lớp:**
-   - **Client / Web App** $\rightarrow$ **mongos (Router)** $\rightarrow$ **Config Server (`cfgRS`)** $\rightarrow$ **3 Shards (`shard1RS`, `shard2RS`, `shard3RS`)**.
-2. **Phân bổ Shard theo Shard Key (`year`):**
-   - **Shard 1 (`shard1RS`):** `year < 1980` (Phim cổ điển) $\approx$ 18% dữ liệu.
-   - **Shard 2 (`shard2RS`):** `1980 <= year < 2000` (Thời kỳ hoàng kim) $\approx$ 27% dữ liệu.
-   - **Shard 3 (`shard3RS`):** `year >= 2000` (Điện ảnh hiện đại) $\approx$ 55% dữ liệu.
-3. **Demo 1: So sánh Định tuyến mongos Router:**
-   - **Targeted Query (Đơn Shard):** Khi truy vấn có Shard Key (`{ year: 1995 }`), `mongos` tra cứu Config Server và gửi thẳng truy vấn tới **DUY NHẤT 1 Shard** (`shard2RS`) $\rightarrow$ Cực nhanh và tối ưu tài nguyên.
-   - **Targeted Range Query (Đa Shard):** Khi truy vấn khoảng (`{ year: { $gte: 1975, $lte: 1985 } }`), `mongos` chỉ gửi tới **2 Shard liên quan** (`shard1RS`, `shard2RS`).
-   - **Scatter-Gather Query (Phát tán toàn cụm):** Khi truy vấn KHÔNG có Shard Key (`{ genres: "Action" }`), `mongos` buộc phải gửi đến **TẤT CẢ các Shard** rồi gom kết quả $\rightarrow$ Tốn tài nguyên mạng và CPU.
-4. **Demo 2: Định tuyến tự động khi Ghi (Insert Routing):**
-   - Thử nhập năm phát hành để xem `mongos` tự động tính toán phân bổ bản ghi mới vào đúng Shard lưu trữ theo Range Partitioning.
+# Xóa toàn bộ container và volumes dữ liệu (làm lại từ đầu)
+docker compose down -v
+```

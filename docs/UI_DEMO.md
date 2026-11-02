@@ -14,11 +14,10 @@
   ```text
   sample_mflix/
   ├── docker-compose.yml       # 3 container MongoDB Replica Set (ports 27030-27032)
-  ├── sampledata.archive       # File archive dữ liệu mẫu
+  ├── sampledata.archive       # File archive dữ liệu mẫu (tải bằng curl)
   ├── requirements.txt         # Flask, pymongo
   ├── app.py                   # Flask backend + Resilient Connection Proxy
-  ├── SETUP.md                 # Hướng dẫn khởi tạo cluster & nạp dữ liệu
-  ├── RUN_WEB.md               # Hướng dẫn cài đặt và chạy ứng dụng web
+  ├── RUN_WEB.md               # Hướng dẫn thiết lập cluster & chạy ứng dụng web
   ├── templates/
   │   └── index.html           # Single Page Application với 3 Tabs
   └── static/
@@ -28,16 +27,19 @@
 
 ---
 
-## 2. THIẾT KẾ HẠ TẦNG DOCKER & DỮ LIỆU (`docker-compose.yml` & `SETUP.md`)
+## 2. THIẾT KẾ HẠ TẦNG DOCKER & DỮ LIỆU (`docker-compose.yml` & `RUN_WEB.md`)
 
-### 2.1. Cấu hình `docker-compose.yml`
-- Tạo 3 services: `mflix1`, `mflix2`, `mflix3`.
-- Dải cổng Host/Container riêng biệt: `27030`, `27031`, `27032` (tránh đụng độ dải cổng `27017..27019`).
-- Lệnh chạy: `mongod --replSet rsMflix --bind_ip_all --port <port>`.
-- Gắn file dữ liệu mẫu vào `mflix1`: `./sampledata.archive:/data/import/sampledata.archive:ro`.
-- Chung mạng `mflix-cluster`, mỗi node có named volume riêng `mflix1_data`, `mflix2_data`, `mflix3_data`.
+### 2.1. Tải Dữ liệu Mẫu & Cấu hình `docker-compose.yml`
+- **Tải dữ liệu bằng `curl`:** Hướng dẫn tải file `sampledata.archive` chính thức từ MongoDB Atlas S3:
+  `curl -L https://atlas-education.s3.amazonaws.com/sampledata.archive -o sampledata.archive`.
+- **Cấu hình `docker-compose.yml`:**
+  - Tạo 3 services: `mflix1`, `mflix2`, `mflix3`.
+  - Dải cổng Host/Container riêng biệt: `27030`, `27031`, `27032` (tránh đụng độ dải cổng `27017..27019`).
+  - Lệnh chạy: `mongod --replSet rsMflix --bind_ip_all --port <port>`.
+  - Gắn file dữ liệu mẫu vào `mflix1`: `./sampledata.archive:/data/import/sampledata.archive:ro`.
+  - Chung mạng `mflix-cluster`, mỗi node có named volume riêng `mflix1_data`, `mflix2_data`, `mflix3_data`.
 
-### 2.2. Trình tự khởi tạo dữ liệu (`SETUP.md`)
+### 2.2. Trình tự khởi tạo dữ liệu (`RUN_WEB.md`)
 1. Khởi động 3 node: `docker compose up -d`.
 2. Khởi tạo Replica Set:
    ```bash

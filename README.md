@@ -27,8 +27,7 @@ CSDLWeb_MongoDB/
 │   ├── docker-compose.yml         # Cụm 3 node (ports 27030-27032)
 │   ├── app.py                     # Flask API backend hỗ trợ tự động failover
 │   ├── templates/ & static/       # Giao diện SPA tối giản (Beige - White - Light Gray)
-│   ├── SETUP.md                   # Khởi tạo cluster & nạp sampledata
-│   └── RUN_WEB.md                 # Hướng dẫn chạy Web UI
+│   └── RUN_WEB.md                 # Hướng dẫn thiết lập cụm & chạy Web UI (tải data bằng curl)
 ├── single/              # Các tập lệnh truy vấn mẫu mongosh (CRUD, Aggregation)
 └── docs/                # Đặc tả prompt để AI Agent code lại từng phần dự án
     ├── CLUSTER_REPLICATION.md
@@ -58,8 +57,10 @@ CSDLWeb_MongoDB/
 1. **Dựng cụm MongoDB & nạp dữ liệu:**
    ```bash
    cd sample_mflix
+   # Tải dữ liệu bằng curl (nếu chưa có sampledata.archive):
+   curl -L https://atlas-education.s3.amazonaws.com/sampledata.archive -o sampledata.archive
    docker compose up -d
-   # Xem các lệnh khởi tạo cụm và import archive tại SETUP.md
+   # Xem các lệnh khởi tạo cụm và import archive tại RUN_WEB.md
    ```
 2. **Chạy Web Server:**
    ```bash
