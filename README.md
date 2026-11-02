@@ -1,5 +1,7 @@
 # Thực Hành & Demo Chuyên Sâu MongoDB
 
+> *Dự án này được xây dựng với sự trợ giúp của AI.*
+
 Dự án cung cấp môi trường thực hành Docker và Web UI trực quan nhằm minh họa các tính năng cốt lõi của **MongoDB**: từ truy vấn cơ bản, Aggregation, Full-Text Search đến kiến trúc phân tán **Replication** (Chịu lỗi - HA) và **Sharding** (Mở rộng ngang - Scale-out).
 
 ---
